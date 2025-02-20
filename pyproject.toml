@@ -1,0 +1,55 @@
+# ---- All project specifications ---- #
+[project]
+name = "touchnet"
+description = "A native-PyTorch library for large scale M-LLM (text/audio/video) training"
+readme = "README.md"
+requires-python = "==3.10"
+license = {file = "LICENSE"}
+authors = [
+    { name = "Xingchen Song", email = "sxc19@tsinghua.org.cn" },
+]
+keywords = ["pytorch", "training", "llm", "mllm"]
+dependencies = [
+    # Hugging Face integrations
+    "datasets>=2.19.0",
+
+    # Tokenization
+    "blobfile",
+    "tiktoken",
+
+    # Miscellaneous
+    "tomli>=1.1.0"
+]
+dynamic = ["version"]
+
+[project.urls]
+GitHub = "https://github.com/xingchensong/TouchNet"
+Documentation = "https://github.com/xingchensong/TouchNet/tree/main/docs"
+Issues = "https://github.com/xingchensong/TouchNet/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pre-commit",
+    "pytest",
+    "pytest-cov",
+    "tensorboard",
+]
+
+[tool.setuptools.dynamic]
+version = {file = "assets/version.txt"}
+
+
+# ---- Explicit project build information ---- #
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = [""]
+include = ["touchnet*"]
+
+[tool.setuptools.package-data]
+recipes = ["examples/*.toml"]
+
+[tool.pytest.ini_options]
+addopts = ["--showlocals"]  # show local variables in tracebacks
