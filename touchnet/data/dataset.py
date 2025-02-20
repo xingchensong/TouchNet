@@ -1,4 +1,3 @@
-
 # Copyright (c) Facebook, Inc. and its affiliates.
 #               Megatron-LM team.
 #               2025 WeNet Community. Xingchen Song(sxc19@tsinghua.org.cn)
@@ -8,9 +7,8 @@ import struct
 import time
 from abc import ABC, abstractmethod
 from enum import Enum
-from functools import lru_cache
 from types import TracebackType
-from typing import List, Optional, Tuple, Type, Union, Literal
+from typing import List, Literal, Optional, Tuple, Type, Union
 
 import numpy
 import torch
@@ -259,7 +257,9 @@ class IndexReader(object):
             self.bin_buffer,
             dtype=numpy.int64,
             count=self.document_count,
-            offset=offset + self.sequence_lengths.nbytes + self.sequence_pointers.nbytes,
+            offset=offset
+            + self.sequence_lengths.nbytes
+            + self.sequence_pointers.nbytes,
         )
         t_end = time.time()
         logger.info(f"\t> time elapsed: {t_end - t_beg:4f} seconds")
@@ -287,8 +287,10 @@ class IndexReader(object):
         """
         return self.sequence_count
 
-    @lru_cache(maxsize=8)
-    def __getitem__(self, idx: int) -> Tuple[numpy.int32, numpy.int64, Optional[numpy.int8]]:
+    # NOTE(xcsong): disable @lru_cache(maxsize=8) for potential memory leak
+    def __getitem__(
+        self, idx: int
+    ) -> Tuple[numpy.int32, numpy.int64, Optional[numpy.int8]]:
         """Return the pointer, length, and mode at the index
 
         Args:
@@ -318,7 +320,8 @@ class BinReader(ABC):
             offset (int): Start reading from this offset (in bytes).
 
         Returns:
-            numpy.ndarray: An array with `count` items and data-type `dtype` constructed from reading bytes from the data file starting at `offset`.
+            numpy.ndarray: An array with `count` items and data-type `dtype` constructed from reading bytes
+            from the data file starting at `offset`.
         """
         pass
 
@@ -345,9 +348,12 @@ class MMapBinReader(BinReader):
             offset (int): Start reading from this offset (in bytes).
 
         Returns:
-            numpy.ndarray: An array with `count` items and data-type `dtype` constructed from reading bytes from the data file starting at `offset`.
+            numpy.ndarray: An array with `count` items and data-type `dtype` constructed from reading bytes
+            from the data file starting at `offset`.
         """
-        return numpy.frombuffer(self._bin_buffer, dtype=dtype, count=count, offset=offset)
+        return numpy.frombuffer(
+            self._bin_buffer, dtype=dtype, count=count, offset=offset
+        )
 
     def __del__(self) -> None:
         """Clean up the object."""
@@ -377,10 +383,11 @@ class FileBinReader(BinReader):
             offset (int): Start reading from this offset (in bytes).
 
         Returns:
-            numpy.ndarray: An array with `count` items and data-type `dtype` constructed from reading bytes from the data file starting at `offset`.
+            numpy.ndarray: An array with `count` items and data-type `dtype` constructed from reading bytes
+            from the data file starting at `offset`.
         """
         sequence = numpy.empty(count, dtype=dtype)
-        with open(self._bin_path, mode='rb', buffering=0) as bin_buffer_file:
+        with open(self._bin_path, mode="rb", buffering=0) as bin_buffer_file:
             bin_buffer_file.seek(offset)
             bin_buffer_file.readinto(sequence)
         return sequence
@@ -399,7 +406,9 @@ class TouchDataset(torch.utils.data.Dataset):
         self,
         path_prefix: str,
         mmap: bool = True,
-        datatypes: Literal["pure_audio", "pure_text", "pair_audio+pair_text"] = "pair_audio+pair_text"
+        datatypes: Literal[
+            "pure_audio", "pure_text", "pair_audio+pair_text"
+        ] = "pair_audio+pair_text",
     ) -> None:
         super().__init__()
         self.path_prefix = None
@@ -411,9 +420,7 @@ class TouchDataset(torch.utils.data.Dataset):
 
         self.initialize(path_prefix, mmap, datatypes)
 
-    def initialize(
-        self, path_prefix: str, mmap: bool, datatypes: str
-    ) -> None:
+    def initialize(self, path_prefix: str, mmap: bool, datatypes: str) -> None:
         """Initialize the dataset
 
         This method is called by IndexedDataset.__init__ during object creation and by
@@ -427,7 +434,7 @@ class TouchDataset(torch.utils.data.Dataset):
         self.path_prefix = path_prefix
         self.mmap = mmap
         self.datatypes = datatypes
-        for d in datatypes.split('+'):
+        for d in datatypes.split("+"):
             idx_path = f"{path_prefix}/{d}.idx"
             bin_path = f"{path_prefix}/{d}.bin"
             assert os.path.exists(idx_path) and os.path.exists(
@@ -476,7 +483,9 @@ class TouchDataset(torch.utils.data.Dataset):
         sequence_pointer, sequence_length = self.index[datatype][idx]
         return sequence_pointer, sequence_length
 
-    def get(self, idx: int, datatype: str, offset: int = 0, length: Optional[int] = None) -> numpy.ndarray:
+    def get(
+        self, idx: int, datatype: str, offset: int = 0, length: Optional[int] = None
+    ) -> numpy.ndarray:
         """Retrieve a single item from the dataset with the option to only
         return a portion of the item.
 
