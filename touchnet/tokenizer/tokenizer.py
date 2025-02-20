@@ -59,7 +59,9 @@ class BaseTokenizer(ABC):
         Raises:
             NotImplementedError: Non-abstract, optional method
         """
-        raise NotImplementedError("{} has no method 'detokenize'".format(type(self).__name__))
+        raise NotImplementedError(
+            "{} has no method 'detokenize'".format(type(self).__name__)
+        )
 
     @property
     @abstractmethod
@@ -86,7 +88,9 @@ class BaseTokenizer(ABC):
         Raises:
             NotImplementedError: Non-abstract, optional attribute
         """
-        raise NotImplementedError("{} has no attribute 'cls'".format(type(self).__name__))
+        raise NotImplementedError(
+            "{} has no attribute 'cls'".format(type(self).__name__)
+        )
 
     @property
     def sep(self):
@@ -95,7 +99,9 @@ class BaseTokenizer(ABC):
         Raises:
             NotImplementedError: Non-abstract, optional attribute
         """
-        raise NotImplementedError("{} has no attribute 'sep'".format(type(self).__name__))
+        raise NotImplementedError(
+            "{} has no attribute 'sep'".format(type(self).__name__)
+        )
 
     @property
     def pad(self):
@@ -104,7 +110,9 @@ class BaseTokenizer(ABC):
         Raises:
             NotImplementedError: Non-abstract, optional attribute
         """
-        raise NotImplementedError("{} has no attribute 'pad'".format(type(self).__name__))
+        raise NotImplementedError(
+            "{} has no attribute 'pad'".format(type(self).__name__)
+        )
 
     @property
     def eod(self):
@@ -113,7 +121,9 @@ class BaseTokenizer(ABC):
         Raises:
             NotImplementedError: Non-abstract, optional attribute
         """
-        raise NotImplementedError("{} has no attribute 'eod'".format(type(self).__name__))
+        raise NotImplementedError(
+            "{} has no attribute 'eod'".format(type(self).__name__)
+        )
 
     @property
     def bos(self):
@@ -122,7 +132,9 @@ class BaseTokenizer(ABC):
         Raises:
             NotImplementedError: Non-abstract, optional attribute
         """
-        raise NotImplementedError("{} has no attribute 'bos'".format(type(self).__name__))
+        raise NotImplementedError(
+            "{} has no attribute 'bos'".format(type(self).__name__)
+        )
 
     @property
     def eos(self):
@@ -131,7 +143,9 @@ class BaseTokenizer(ABC):
         Raises:
             NotImplementedError: Non-abstract, optional attribute
         """
-        raise NotImplementedError("{} has no attribute 'eos'".format(type(self).__name__))
+        raise NotImplementedError(
+            "{} has no attribute 'eos'".format(type(self).__name__)
+        )
 
     @property
     def mask(self):
@@ -140,7 +154,9 @@ class BaseTokenizer(ABC):
         Raises:
             NotImplementedError: Non-abstract, optional attribute
         """
-        raise NotImplementedError("{} has no attribute 'mask'".format(type(self).__name__))
+        raise NotImplementedError(
+            "{} has no attribute 'mask'".format(type(self).__name__)
+        )
 
 
 class HuggingFaceTokenizer(BaseTokenizer):
@@ -156,14 +172,19 @@ class HuggingFaceTokenizer(BaseTokenizer):
         try:
             import transformers
         except ImportError:
-            raise EnvironmentError("The transformers library must be installed to use huggingface_tokenizer")
+            raise EnvironmentError(
+                "The transformers library must be installed to use huggingface_tokenizer"
+            )
         if self._tokenizer is None:
             # TODO(bnorick): download tokenizer once to lustre and use force offline to make sure all tasks read it from there
             self._tokenizer = transformers.AutoTokenizer.from_pretrained(
-                pretrained_model_name_or_path=self.pretrained_model_name_or_path, **self.kwargs
+                pretrained_model_name_or_path=self.pretrained_model_name_or_path,
+                **self.kwargs
             )
             self._vocab = self._tokenizer.get_vocab()
-            self._inv_vocab = {token_id: token for token, token_id in self._vocab.items()}
+            self._inv_vocab = {
+                token_id: token for token, token_id in self._vocab.items()
+            }
 
     @property
     def vocab_size(self):
