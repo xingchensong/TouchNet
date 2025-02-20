@@ -26,3 +26,4 @@ exclude =
     .pre-commit-config.yaml
     *.md
     .flake8
+    __init__.py
