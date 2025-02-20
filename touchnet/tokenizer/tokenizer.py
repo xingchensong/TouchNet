@@ -9,6 +9,7 @@ from collections import OrderedDict
 from typing import Any
 
 import numpy
+import transformers
 
 
 class BaseTokenizer(ABC):
@@ -169,12 +170,6 @@ class HuggingFaceTokenizer(BaseTokenizer):
         self._inv_vocab = None
 
     def _build_hugging_face(self):
-        try:
-            import transformers
-        except ImportError:
-            raise EnvironmentError(
-                "The transformers library must be installed to use huggingface_tokenizer"
-            )
         if self._tokenizer is None:
             # TODO(bnorick): download tokenizer once to lustre and use force offline to make sure all tasks read it from there
             self._tokenizer = transformers.AutoTokenizer.from_pretrained(
