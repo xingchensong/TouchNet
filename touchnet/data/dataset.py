@@ -7,7 +7,6 @@ import struct
 import time
 from abc import ABC, abstractmethod
 from enum import Enum
-from functools import lru_cache
 from types import TracebackType
 from typing import List, Literal, Optional, Tuple, Type, Union
 
@@ -288,7 +287,7 @@ class IndexReader(object):
         """
         return self.sequence_count
 
-    @lru_cache(maxsize=8)
+    # NOTE(xcsong): disable @lru_cache(maxsize=8) for potential memory leak
     def __getitem__(
         self, idx: int
     ) -> Tuple[numpy.int32, numpy.int64, Optional[numpy.int8]]:
@@ -321,7 +320,8 @@ class BinReader(ABC):
             offset (int): Start reading from this offset (in bytes).
 
         Returns:
-            numpy.ndarray: An array with `count` items and data-type `dtype` constructed from reading bytes from the data file starting at `offset`.
+            numpy.ndarray: An array with `count` items and data-type `dtype` constructed from reading bytes
+            from the data file starting at `offset`.
         """
         pass
 
@@ -348,7 +348,8 @@ class MMapBinReader(BinReader):
             offset (int): Start reading from this offset (in bytes).
 
         Returns:
-            numpy.ndarray: An array with `count` items and data-type `dtype` constructed from reading bytes from the data file starting at `offset`.
+            numpy.ndarray: An array with `count` items and data-type `dtype` constructed from reading bytes
+            from the data file starting at `offset`.
         """
         return numpy.frombuffer(
             self._bin_buffer, dtype=dtype, count=count, offset=offset
@@ -382,7 +383,8 @@ class FileBinReader(BinReader):
             offset (int): Start reading from this offset (in bytes).
 
         Returns:
-            numpy.ndarray: An array with `count` items and data-type `dtype` constructed from reading bytes from the data file starting at `offset`.
+            numpy.ndarray: An array with `count` items and data-type `dtype` constructed from reading bytes
+            from the data file starting at `offset`.
         """
         sequence = numpy.empty(count, dtype=dtype)
         with open(self._bin_path, mode="rb", buffering=0) as bin_buffer_file:
