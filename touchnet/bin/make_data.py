@@ -1,13 +1,13 @@
-import numpy
-import torch
-import os
 import json
 import multiprocessing
-
-from typing import List, Type
+import os
 from dataclasses import dataclass, field
+from subprocess import CalledProcessError, run
+from typing import List, Type
+
+import numpy
+import torch
 from transformers.hf_argparser import HfArgumentParser
-from subprocess import run, CalledProcessError
 
 from touchnet.data.dataset import IndexWriter
 from touchnet.utils.logging import init_logger, logger
@@ -21,9 +21,7 @@ class MakeDataConfig:
 
     save_dir: str = field(
         metadata={
-            "help": (
-                "dir to save data."
-            ),
+            "help": ("dir to save data."),
         },
     )
     jsonl_path: str = field(
@@ -32,8 +30,8 @@ class MakeDataConfig:
                 "each line contains a json dict, "
                 "e.g. `head -2 /mnt/data/data.jsonl`\n"
                 "```\n"
-                "{\"key\": 1, \"wav\": \"/mnt/data/audio/1.wav\", \"text\": \"hello world\"}\n"
-                "{\"key\": 2, \"wav\": \"/mnt/data/audio/2.wav\", \"text\": \"wow cool\"}\n"
+                '{"key": 1, "wav": "/mnt/data/audio/1.wav", "text": "hello world"}\n'
+                '{"key": 2, "wav": "/mnt/data/audio/2.wav", "text": "wow cool"}\n'
                 "```\n"
             )
         },
@@ -41,35 +39,29 @@ class MakeDataConfig:
     num_utt_per_shard: int = field(
         default=1000,
         metadata={
-            "help": (
-                "number of utterances per shard."
-            ),
+            "help": ("number of utterances per shard."),
         },
     )
     audio_resample: int = field(
         default=16000,
         metadata={
-            "help": (
-                "reample rate of audio."
-            ),
+            "help": ("reample rate of audio."),
         },
     )
     num_workers: int = field(
         default=10,
         metadata={
-            "help": (
-                "parallel workers."
-            ),
+            "help": ("parallel workers."),
         },
     )
     datatypes: str = field(
         default="pair_audio+pair_text",
         metadata={
-            "help": (
-                "types of multimodel Dataset."
-            ),
+            "help": ("types of multimodel Dataset."),
             "choices": [
-                "pair_audio+pair_text", "pure_audio", "pure_text",
+                "pair_audio+pair_text",
+                "pure_audio",
+                "pure_text",
             ],
         },
     )
@@ -97,9 +89,7 @@ class DataBuilder(object):
             [bytes_of_seq1] [bytes_of_seq2] [...] [bytes_of_seqN]
     """
 
-    def __init__(
-        self, bin_path: str, dtype: Type[numpy.number] = numpy.int32
-    ) -> None:
+    def __init__(self, bin_path: str, dtype: Type[numpy.number] = numpy.int32) -> None:
         self.data_file = open(bin_path, "wb")
         self.dtype = dtype
 
@@ -116,9 +106,7 @@ class DataBuilder(object):
         self.data_file.write(np_array.tobytes(order="C"))
         self.sequence_lengths.append(np_array.size)
 
-    def add_document(
-        self, tensor: torch.Tensor, lengths: List[int]
-    ) -> None:
+    def add_document(self, tensor: torch.Tensor, lengths: List[int]) -> None:
         """Add an entire document to the dataset
 
         Args:
@@ -146,10 +134,9 @@ class DataBuilder(object):
             writer.write(self.sequence_lengths, self.document_indices)
 
 
-def load_audio(file: str,
-               sr: int = 16000,
-               start_time: float = 0.0,
-               end_time: float = None):
+def load_audio(
+    file: str, sr: int = 16000, start_time: float = 0.0, end_time: float = None
+):
     """Open an audio file and read as mono waveform,
        resampling as necessary, for a specific time segment
 
@@ -187,7 +174,7 @@ def load_audio(file: str,
         "-acodec",
         "pcm_s16le",
         "-ar",
-        str(sr)
+        str(sr),
     ]
 
     # Calculate and add duration
@@ -219,21 +206,25 @@ def build_pure_audio():
     pass
 
 
-def build_pair_audio_pair_text(chunk: List[str], path_prefix: str,
-                               cur_chunk: int, num_chunks: int,
-                               conf: MakeDataConfig):
+def build_pair_audio_pair_text(
+    chunk: List[str],
+    path_prefix: str,
+    cur_chunk: int,
+    num_chunks: int,
+    conf: MakeDataConfig,
+):
     builders = {
         "pair_audio": DataBuilder(f"{path_prefix}/pair_audio.bin", numpy.int16),
         "pair_text": DataBuilder(f"{path_prefix}/pair_text.bin", numpy.uint8),
     }
-    logger.info('Processing {} {}/{}'.format(path_prefix, cur_chunk, num_chunks))
+    logger.info("Processing {} {}/{}".format(path_prefix, cur_chunk, num_chunks))
 
     for sample in chunk:
         try:
             data = json.loads(sample.strip())
             waveform = load_audio(data["wav"], conf.audio_resample)
             waveform = torch.from_numpy(waveform)
-            sample_utf8 = sample.strip().encode('utf-8')
+            sample_utf8 = sample.strip().encode("utf-8")
             sample_utf8 = numpy.frombuffer(sample_utf8, dtype=numpy.uint8)
             text = torch.from_numpy(numpy.copy(sample_utf8))
         except Exception as ex:
@@ -261,7 +252,7 @@ if __name__ == "__main__":
         for line in f:
             samples.append(line.strip())
     num = conf.num_utt_per_shard
-    chunks = [samples[i:i + num] for i in range(0, len(samples), num)]
+    chunks = [samples[i : i + num] for i in range(0, len(samples), num)]
     os.makedirs(conf.save_dir, exist_ok=True)
 
     if conf.datatypes == "pair_audio+pair_text":
@@ -273,15 +264,14 @@ if __name__ == "__main__":
     shards_list = []
     num_chunks = len(chunks)
     for i, chunk in enumerate(chunks):
-        path_prefix = '{}/{:09d}'.format(conf.save_dir, i)
+        path_prefix = "{}/{:09d}".format(conf.save_dir, i)
         os.makedirs(path_prefix, exist_ok=True)
         shards_list.append(path_prefix)
-        pool.apply_async(processor, (chunk, path_prefix, i,
-                                     num_chunks, conf))
+        pool.apply_async(processor, (chunk, path_prefix, i, num_chunks, conf))
 
     pool.close()
     pool.join()
 
-    with open(f"{conf.save_dir}/data.list", 'w', encoding='utf8') as fout:
+    with open(f"{conf.save_dir}/data.list", "w", encoding="utf8") as fout:
         for name in shards_list:
-            fout.write(name + '\n')
+            fout.write(name + "\n")
