@@ -1,7 +1,6 @@
 import json
 import multiprocessing
 import os
-from dataclasses import dataclass, field
 from subprocess import CalledProcessError, run
 from typing import List, Type
 
@@ -9,62 +8,9 @@ import numpy
 import torch
 from transformers.hf_argparser import HfArgumentParser
 
+from touchnet.bin import MakeDataConfig
 from touchnet.data.dataset import IndexWriter
 from touchnet.utils.logging import init_logger, logger
-
-
-@dataclass
-class MakeDataConfig:
-    """Configuration object for make_data"""
-
-    _argument_group_name = "make_data"
-
-    save_dir: str = field(
-        metadata={
-            "help": ("dir to save data."),
-        },
-    )
-    jsonl_path: str = field(
-        metadata={
-            "help": (
-                "each line contains a json dict, "
-                "e.g. `head -2 /mnt/data/data.jsonl`\n"
-                "```\n"
-                '{"key": 1, "wav": "/mnt/data/audio/1.wav", "text": "hello world"}\n'
-                '{"key": 2, "wav": "/mnt/data/audio/2.wav", "text": "wow cool"}\n'
-                "```\n"
-            )
-        },
-    )
-    num_utt_per_shard: int = field(
-        default=1000,
-        metadata={
-            "help": ("number of utterances per shard."),
-        },
-    )
-    audio_resample: int = field(
-        default=16000,
-        metadata={
-            "help": ("reample rate of audio."),
-        },
-    )
-    num_workers: int = field(
-        default=10,
-        metadata={
-            "help": ("parallel workers."),
-        },
-    )
-    datatypes: str = field(
-        default="pair_audio+pair_text",
-        metadata={
-            "help": ("types of multimodel Dataset."),
-            "choices": [
-                "pair_audio+pair_text",
-                "pure_audio",
-                "pure_text",
-            ],
-        },
-    )
 
 
 class DataBuilder(object):
@@ -224,6 +170,8 @@ def build_pair_audio_pair_text(
             data = json.loads(sample.strip())
             waveform = load_audio(data["wav"], conf.audio_resample)
             waveform = torch.from_numpy(waveform)
+            data["sample_rate"] = conf.audio_resample
+            sample = json.dumps(data, ensure_ascii=False)
             sample_utf8 = sample.strip().encode("utf-8")
             sample_utf8 = numpy.frombuffer(sample_utf8, dtype=numpy.uint8)
             text = torch.from_numpy(numpy.copy(sample_utf8))
