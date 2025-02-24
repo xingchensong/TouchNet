@@ -18,3 +18,4 @@ pip install -r requirements.txt
 - [ ] dataset (& UT)
 - [ ] model (& UT)
 - [ ] train (& UT)
+- [ ] infer (& UT)

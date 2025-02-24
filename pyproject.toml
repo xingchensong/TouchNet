@@ -1,7 +1,7 @@
 # ---- All project specifications ---- #
 [project]
 name = "touchnet"
-description = "A native-PyTorch library for large scale M-LLM (text/audio/video) training"
+description = "A native-PyTorch library for large scale M-LLM (text/audio/video) training with tp/dp/sp/cp."
 readme = "README.md"
 requires-python = "==3.10"
 license = {file = "LICENSE"}
@@ -11,11 +11,9 @@ authors = [
 keywords = ["pytorch", "training", "llm", "mllm"]
 dependencies = [
     # Hugging Face integrations
-    "datasets>=2.19.0",
-
-    # Tokenization
-    "blobfile",
-    "tiktoken",
+    "datasets>=3.2.0",
+    "transformers>=4.47.1",
+    "tokenizers>=0.21.0",
 
     # Miscellaneous
     "tomli>=1.1.0"

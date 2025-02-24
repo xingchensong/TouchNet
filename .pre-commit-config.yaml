@@ -35,14 +35,6 @@ repos:
       - torchfix
     args: ['--config=.flake8']
 
-- repo: https://github.com/omnilib/ufmt
-  rev: v2.3.0
-  hooks:
-  - id: ufmt
-    additional_dependencies:
-      - black == 22.12.0
-      - usort == 1.0.5
-
 - repo: https://github.com/jsh9/pydoclint
   rev: d88180a8632bb1602a4d81344085cf320f288c5a
   hooks:
