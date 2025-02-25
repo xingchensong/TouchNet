@@ -3,7 +3,7 @@
 name = "touchnet"
 description = "A native-PyTorch library for large scale M-LLM (text/audio/video) training with tp/dp/sp/cp."
 readme = "README.md"
-requires-python = "==3.10"
+requires-python = ">=3.10,<3.11"
 license = {file = "LICENSE"}
 authors = [
     { name = "Xingchen Song", email = "sxc19@tsinghua.org.cn" },
