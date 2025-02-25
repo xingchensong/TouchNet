@@ -15,6 +15,11 @@ dependencies = [
     "transformers>=4.47.1",
     "tokenizers>=0.21.0",
 
+    # Torch
+    "torch>=2.6.0",
+    "torchaudio>=2.6.0",
+    "torchdata>=0.10.1",
+
     # Miscellaneous
     "tomli>=1.1.0"
 ]
