@@ -80,24 +80,24 @@ class TouchDatapipe(IterableDataset, Stateful):
 
             for i, sample_idx in enumerate(sample_idxs):
                 self.consumed_samples = i
-                if self.config.dataset_datatypes == "pure_text":
+                if self.config.dataset_datatypes == "text":
                     # for text pre-training
-                    text = _dataset.get(sample_idx, "pure_text")
+                    text = _dataset.get(sample_idx, "text")
                     text = text.tobytes().decode('utf-8')
                     text = json.loads(text.strip())
                     yield text
-                elif self.config.dataset_datatypes == "pure_audio":
+                elif self.config.dataset_datatypes == "audio":
                     # for audio pre-training
                     if self.config.dataset_random_cut_audio:
-                        audio_p, audio_l = _dataset.get_idx(sample_idx, "pure_audio")
+                        audio_p, audio_l = _dataset.get_idx(sample_idx, "audio")
                         # TODO(xcsong): slice audio
                         pass
                     else:
-                        audio = _dataset.get(sample_idx, "pure_audio")
+                        audio = _dataset.get(sample_idx, "audio")
                     yield dict(audio=audio)
-                elif self.config.dataset_datatypes == "pair_audio+pair_text":
+                elif self.config.dataset_datatypes == "audio+text":
                     # for audio-text alignment
-                    text = _dataset.get(sample_idx, "pair_text")
+                    text = _dataset.get(sample_idx, "text")
                     text = text.tobytes().decode('utf-8')
                     text = json.loads(text.strip())
                     offset = 0
@@ -115,7 +115,7 @@ class TouchDatapipe(IterableDataset, Stateful):
                             end = int(float(segment["end"]) * sample_rate)
                             offset = start
                             length = end - start
-                    audio = _dataset.get(sample_idx, "pair_audio", offset=offset, length=length)
+                    audio = _dataset.get(sample_idx, "audio", offset=offset, length=length)
                     audio = audio.astype(numpy.float32) / 32768.0  # normalize to [-1.0, 1.0]
                     text["waveform"] = torch.from_numpy(audio).unsqueeze(0)  # [1, T]
                     yield text
