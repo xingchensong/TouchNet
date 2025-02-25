@@ -53,13 +53,13 @@ class DataConfig:
         },
     )
     dataset_datatypes: str = field(
-        default="pair_audio+pair_text",
+        default="audio+text",
         metadata={
             "help": (
                 "types of multimodel Dataset."
             ),
             "choices": [
-                "pair_audio+pair_text", "pure_audio", "pure_text",
+                "audio+text", "audio", "text",
             ],
         },
     )
@@ -67,7 +67,7 @@ class DataConfig:
         default=True,
         metadata={
             "help": (
-                "Randomly cut audio in pure_audio pretraining mode."
+                "Randomly cut audio in audio pretraining mode."
             )
         },
     )
@@ -138,7 +138,7 @@ class DataConfig:
             "help": (
                 "Max ratio of len(text) / len(audio). "
                 "Drop utterance which is greater than this value. "
-                "only valid in `pair_audio+pair_text` mode."
+                "only valid in `audio+text` mode."
             )
         },
     )

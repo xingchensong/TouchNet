@@ -43,13 +43,13 @@ class MakeDataConfig:
         },
     )
     datatypes: str = field(
-        default="pair_audio+pair_text",
+        default="audio+text",
         metadata={
             "help": ("types of multimodel Dataset."),
             "choices": [
-                "pair_audio+pair_text",
-                "pure_audio",
-                "pure_text",
+                "audio+text",
+                "audio",
+                "text",
             ],
         },
     )

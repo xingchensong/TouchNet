@@ -407,8 +407,8 @@ class TouchDataset(torch.utils.data.Dataset):
         path_prefix: str,
         mmap: bool = True,
         datatypes: Literal[
-            "pure_audio", "pure_text", "pair_audio+pair_text"
-        ] = "pair_audio+pair_text",
+            "audio", "text", "audio+text"
+        ] = "audio+text",
     ) -> None:
         super().__init__()
         self.path_prefix = None

@@ -144,15 +144,15 @@ def load_audio(
     return numpy.frombuffer(out, numpy.int16).flatten()
 
 
-def build_pure_text():
+def build_text():
     pass
 
 
-def build_pure_audio():
+def build_audio():
     pass
 
 
-def build_pair_audio_pair_text(
+def build_audio_text(
     chunk: List[str],
     path_prefix: str,
     cur_chunk: int,
@@ -160,8 +160,8 @@ def build_pair_audio_pair_text(
     conf: MakeDataConfig,
 ):
     builders = {
-        "pair_audio": DataBuilder(f"{path_prefix}/pair_audio.bin", numpy.int16),
-        "pair_text": DataBuilder(f"{path_prefix}/pair_text.bin", numpy.uint8),
+        "audio": DataBuilder(f"{path_prefix}/audio.bin", numpy.int16),
+        "text": DataBuilder(f"{path_prefix}/text.bin", numpy.uint8),
     }
     logger.info("Processing {} {}/{}".format(path_prefix, cur_chunk, num_chunks))
 
@@ -178,14 +178,14 @@ def build_pair_audio_pair_text(
         except Exception as ex:
             logger.warning(f"Catch exception in reading {sample}: {ex}")
             continue
-        builders["pair_audio"].add_item(waveform)
-        builders["pair_text"].add_item(text)
+        builders["audio"].add_item(waveform)
+        builders["text"].add_item(text)
         # documents contain only one sentence.
-        builders["pair_audio"].end_document()
-        builders["pair_text"].end_document()
+        builders["audio"].end_document()
+        builders["text"].end_document()
 
-    builders["pair_audio"].finalize(f"{path_prefix}/pair_audio.idx")
-    builders["pair_text"].finalize(f"{path_prefix}/pair_text.idx")
+    builders["audio"].finalize(f"{path_prefix}/audio.idx")
+    builders["text"].finalize(f"{path_prefix}/text.idx")
 
 
 if __name__ == "__main__":
@@ -203,8 +203,8 @@ if __name__ == "__main__":
     chunks = [samples[i : i + num] for i in range(0, len(samples), num)]
     os.makedirs(conf.save_dir, exist_ok=True)
 
-    if conf.datatypes == "pair_audio+pair_text":
-        processor = build_pair_audio_pair_text
+    if conf.datatypes == "audio+text":
+        processor = build_audio_text
     else:
         raise NotImplementedError()
 

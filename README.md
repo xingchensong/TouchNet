@@ -5,7 +5,7 @@
 #               (for example, Ubuntu 20.04 and later versions).
 conda create -n touchnet python=3.10  # megatron_core requires python>=3.10
 conda activate touchnet
-conda install -c conda-forge git vim zsh shellcheck tmux cmake nodejs ruby gawk ctags sox -y
+conda install -c conda-forge git vim zsh shellcheck tmux cmake nodejs ruby gawk ctags sox ffmpeg -y
 conda install -c conda-forge gcc=11.4.0 gxx=11.4.0 libstdcxx-devel_linux-64=11.4.0 -y  # transformer_engine requires gcc>=11.4.0
 # install cuda12.6.3+cudnnn9.5.1.17
 bash install_cuda_cudnn.sh
