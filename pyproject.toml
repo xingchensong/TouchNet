@@ -21,7 +21,8 @@ dependencies = [
     "torchdata>=0.10.1",
 
     # Miscellaneous
-    "tomli>=1.1.0"
+    "tomli>=1.1.0",
+    "librosa",
 ]
 dynamic = ["version"]
 
