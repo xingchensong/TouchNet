@@ -9,6 +9,7 @@ class DataConfig:
     _argument_group_name = "data"
 
     datalist_path: str = field(
+        default=None,
         metadata={
             "help": (
                 "list of dataset, each line is a prefix path to a `TouchDataset`. "
@@ -50,17 +51,6 @@ class DataConfig:
             "help": (
                 "Use mmap for reading .bin files in Dataset."
             )
-        },
-    )
-    dataset_datatypes: str = field(
-        default="audio+text",
-        metadata={
-            "help": (
-                "types of multimodel Dataset."
-            ),
-            "choices": [
-                "audio+text", "audio", "text",
-            ],
         },
     )
     dataset_random_cut_audio: bool = field(
@@ -138,7 +128,7 @@ class DataConfig:
             "help": (
                 "Max ratio of len(text) / len(audio). "
                 "Drop utterance which is greater than this value. "
-                "only valid in `audio+text` mode."
+                "only valid in `audio+metainfo` mode."
             )
         },
     )
