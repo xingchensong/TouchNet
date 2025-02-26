@@ -17,8 +17,8 @@ def run_shell():
 
 
 @pytest.mark.parametrize("num, expected_md5", [
-    (1, "b6288ac0dcdbb316f54d3b3a1302a991"),
-    (2, "ce21a98e84a57e75c3a754167e4843df")
+    (1, "52aa63d2a8bb241047c12b9006c3b647"),
+    (2, "a77adbbe26ee4bc6c1aefc38ec858273")
 ])
 def test_make_data(run_shell, num, expected_md5):
     result = run_shell(
@@ -29,7 +29,7 @@ def test_make_data(run_shell, num, expected_md5):
                 --num_utt_per_shard {num} \
                 --audio_resample 16000 \
                 --num_workers 1 \
-                --datatypes 'audio+text'
+                --datatypes 'audio+metainfo'
         """
     )
     assert result.returncode == 0

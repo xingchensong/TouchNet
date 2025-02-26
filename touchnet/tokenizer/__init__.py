@@ -10,6 +10,7 @@ class TokenizerConfig:
     _argument_group_name = "tokenizer"
 
     tokenizer_model: str = field(
+        default=None,
         metadata={
             "help": ("path of tokenizer."),
         },

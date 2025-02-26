@@ -8,11 +8,13 @@ class MakeDataConfig:
     _argument_group_name = "make_data"
 
     save_dir: str = field(
+        default="./exp",
         metadata={
             "help": ("dir to save data."),
         },
     )
     jsonl_path: str = field(
+        default=None,
         metadata={
             "help": (
                 "each line contains a json dict, "
@@ -43,13 +45,15 @@ class MakeDataConfig:
         },
     )
     datatypes: str = field(
-        default="audio+text",
+        default="audio+metainfo",
         metadata={
             "help": ("types of multimodel Dataset."),
             "choices": [
-                "audio+text",
+                "metainfo",
+                "audio+metainfo",
                 "audio",
-                "text",
+                "audiotoken",
+                "texttoken",
             ],
         },
     )

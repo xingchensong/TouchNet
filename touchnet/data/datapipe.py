@@ -26,21 +26,29 @@ class TouchDatapipe(IterableDataset, Stateful):
         with open(config.datalist_path, "r") as f:
             lists = f.readlines()
             for l in lists:
-                self.lists.append(l.strip())
+                l = l.strip().split()
+                assert len(l) == 2
+                self.lists.append(dict(dir=l[0], datatypes=l[1]))
         self.config = config
         self.dp_rank = dp_rank
         self.dp_world_size = dp_world_size
 
         # Variables for checkpointing
         self.epoch = 0
+        self.consumed_lists = 0
         self.consumed_samples = 0
 
     def load_state_dict(self, state_dict: Dict[str, Any]):
         self.epoch = state_dict["epoch"]
+        self.consumed_lists = state_dict["consumed_lists"]
         self.consumed_samples = state_dict["consumed_samples"]
 
     def state_dict(self):
-        return {"epoch": self.epoch, "consumed_samples": self.consumed_samples}
+        return {
+            "epoch": self.epoch,
+            "consumed_lists": self.consumed_lists,
+            "consumed_samples": self.consumed_samples,
+        }
 
     def __iter__(self):
         list_idxs = list(range(len(self.lists)))
@@ -65,9 +73,11 @@ class TouchDatapipe(IterableDataset, Stateful):
             num_workers = worker_info.num_workers
         list_idxs = list_idxs[worker_id::num_workers]
 
-        for list_idx in list_idxs:
-            _dataset = TouchDataset(self.lists[list_idx], self.config.dataset_mmap,
-                                    self.config.dataset_datatypes)
+        start_list = self.consumed_lists
+        for list_idx in list_idxs[start_list:]:
+            _dataset = TouchDataset(self.lists[list_idx]["dir"],
+                                    self.config.dataset_mmap,
+                                    self.lists[list_idx]["datatypes"])
 
             # 2nd shuffle on samples
             num_samples = len(_dataset)
@@ -78,15 +88,19 @@ class TouchDatapipe(IterableDataset, Stateful):
             else:
                 sample_idxs = list(range(num_samples))
 
-            for i, sample_idx in enumerate(sample_idxs):
-                self.consumed_samples = i
-                if self.config.dataset_datatypes == "text":
+            start_sample = self.consumed_samples
+            for sample_idx in sample_idxs[start_sample:]:
+                if self.lists[list_idx]["datatypes"] == "metainfo":
                     # for text pre-training
-                    text = _dataset.get(sample_idx, "text")
-                    text = text.tobytes().decode('utf-8')
-                    text = json.loads(text.strip())
-                    yield text
-                elif self.config.dataset_datatypes == "audio":
+                    metainfo = _dataset.get(sample_idx, "metainfo")
+                    metainfo = metainfo.tobytes().decode('utf-8')
+                    metainfo = json.loads(metainfo.strip())
+                    yield metainfo
+                elif self.lists[list_idx]["datatypes"] == "texttoken":
+                    # for text pre-training
+                    texttoken = _dataset.get(sample_idx, "texttoken").tolist()
+                    yield dict(input_ids=texttoken)
+                elif self.lists[list_idx]["datatypes"] == "audio":
                     # for audio pre-training
                     if self.config.dataset_random_cut_audio:
                         audio_p, audio_l = _dataset.get_idx(sample_idx, "audio")
@@ -95,21 +109,21 @@ class TouchDatapipe(IterableDataset, Stateful):
                     else:
                         audio = _dataset.get(sample_idx, "audio")
                     yield dict(audio=audio)
-                elif self.config.dataset_datatypes == "audio+text":
+                elif self.lists[list_idx]["datatypes"] == "audio+metainfo":
                     # for audio-text alignment
-                    text = _dataset.get(sample_idx, "text")
-                    text = text.tobytes().decode('utf-8')
-                    text = json.loads(text.strip())
+                    metainfo = _dataset.get(sample_idx, "metainfo")
+                    metainfo = metainfo.tobytes().decode('utf-8')
+                    metainfo = json.loads(metainfo.strip())
                     offset = 0
                     length = None
-                    info = text.get("info", None)
+                    info = metainfo.get("info", None)
                     if info is not None:
                         segments = info.get("segments", None)
                         if segments is not None:
                             assert "sample_rate" in info
                             sample_rate = info["sample_rate"]
                             g = torch.Generator()
-                            g.manual_seed(self.epoch + i)
+                            g.manual_seed(self.epoch + self.consumed_lists + self.consumed_samples)
                             segment = segments[torch.randint(len(segments), (1,), generator=g).item()]
                             start = int(float(segment["start"]) * sample_rate)
                             end = int(float(segment["end"]) * sample_rate)
@@ -117,13 +131,19 @@ class TouchDatapipe(IterableDataset, Stateful):
                             length = end - start
                     audio = _dataset.get(sample_idx, "audio", offset=offset, length=length)
                     audio = audio.astype(numpy.float32) / 32768.0  # normalize to [-1.0, 1.0]
-                    text["waveform"] = torch.from_numpy(audio).unsqueeze(0)  # [1, T]
-                    yield text
+                    metainfo["waveform"] = torch.from_numpy(audio).unsqueeze(0)  # [1, T]
+                    yield metainfo
                 else:
-                    raise NotImplementedError(f"unsupported datatypes: {self.config.dataset_datatypes}")
+                    raise NotImplementedError(f"unsupported datatypes: {self.lists[list_idx]['datatypes']}")
+                self.consumed_samples += 1
+
+            self.consumed_samples = 0
+            self.consumed_lists += 1
+
+        self.consumed_lists = 0
 
 
-class Processor(IterableDataset):
+class Processor(IterableDataset, Stateful):
     """
     Processor class for data processing.
     """
@@ -147,8 +167,16 @@ class Processor(IterableDataset):
         assert callable(f)
         return Processor(self, f, *self.args, **self.kw)
 
+    def load_state_dict(self, state_dict: Dict[str, Any]):
+        assert self.source is not None
+        self.source.load_state_dict(state_dict)
 
-def pairaudio_pairtext_datapipe(
+    def state_dict(self):
+        assert self.source is not None
+        return self.source.state_dict()
+
+
+def audio_and_metainfo_datapipe(
     data_config: DataConfig,
     tokenizer_config: TokenizerConfig,
     dp_rank: int, dp_world_size: int,
@@ -189,8 +217,11 @@ def pairaudio_pairtext_datapipe(
     return datapipe
 
 
-def pureaudio_datapipe():
+def audio_datapipe():
     pass
 
-def puretext_datapipe():
+def texttoken_datapipe():
+    pass
+
+def audiotoken_datapipe():
     pass

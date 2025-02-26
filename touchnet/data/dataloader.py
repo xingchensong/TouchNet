@@ -53,11 +53,13 @@ class ParallelAwareDataloader(StatefulDataLoader, BaseDataLoader):
         batch_size: int,
         num_workers: int,
         pin_memory: bool,
+        prefetch_factor: int,
     ):
         self.dp_world_size = dp_world_size
         self.dp_rank = dp_rank
         self.batch_size = batch_size
-        super().__init__(dataset, batch_size, num_workers=num_workers, pin_memory=pin_memory)
+        super().__init__(dataset, batch_size, num_workers=num_workers,
+                         pin_memory=pin_memory, prefetch_factor=prefetch_factor)
         self._rank_id = f"dp_rank_{dp_rank}"
 
     def state_dict(self) -> dict[str, Any]:

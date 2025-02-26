@@ -9,7 +9,8 @@ import torch
 from transformers.hf_argparser import HfArgumentParser
 
 from touchnet.bin import MakeDataConfig
-from touchnet.data.dataset import IndexWriter
+from touchnet.data.dataset import DType, IndexWriter
+from touchnet.tokenizer import TokenizerConfig, build_tokenizer
 from touchnet.utils.logging import init_logger, logger
 
 
@@ -144,24 +145,62 @@ def load_audio(
     return numpy.frombuffer(out, numpy.int16).flatten()
 
 
-def build_text():
-    pass
-
-
-def build_audio():
-    pass
-
-
-def build_audio_text(
+def build_texttoken(
     chunk: List[str],
     path_prefix: str,
     cur_chunk: int,
     num_chunks: int,
     conf: MakeDataConfig,
+    tok_conf: TokenizerConfig,
+    *args,
+    **kwargs,
+):
+    tokenizer = build_tokenizer(tok_conf)
+    builders = {
+        "texttoken": DataBuilder(f"{path_prefix}/texttoken.bin",
+                                 DType.optimal_dtype(tokenizer.vocab_size))
+    }
+    logger.info("Processing {} {}/{}".format(path_prefix, cur_chunk, num_chunks))
+
+    for sample in chunk:
+        try:
+            data = json.loads(sample.strip())
+            # TODO(xcsong): split sentence ?
+            texttoken = tokenizer.tokenize(data["text"])
+        except Exception as ex:
+            logger.warning(f"Catch exception in reading {sample}: {ex}")
+            continue
+        builders["texttoken"].add_item(torch.IntTensor(texttoken))
+        # documents contain only one sentence.
+        builders["texttoken"].end_document()
+
+    builders["texttoken"].finalize(f"{path_prefix}/texttoken.idx")
+
+
+def build_audio(
+    chunk: List[str],
+    path_prefix: str,
+    cur_chunk: int,
+    num_chunks: int,
+    conf: MakeDataConfig,
+    *args,
+    **kwargs,
+):
+    pass
+
+
+def build_audio_and_metainfo(
+    chunk: List[str],
+    path_prefix: str,
+    cur_chunk: int,
+    num_chunks: int,
+    conf: MakeDataConfig,
+    *args,
+    **kwargs,
 ):
     builders = {
         "audio": DataBuilder(f"{path_prefix}/audio.bin", numpy.int16),
-        "text": DataBuilder(f"{path_prefix}/text.bin", numpy.uint8),
+        "metainfo": DataBuilder(f"{path_prefix}/metainfo.bin", numpy.uint8),
     }
     logger.info("Processing {} {}/{}".format(path_prefix, cur_chunk, num_chunks))
 
@@ -179,19 +218,19 @@ def build_audio_text(
             logger.warning(f"Catch exception in reading {sample}: {ex}")
             continue
         builders["audio"].add_item(waveform)
-        builders["text"].add_item(text)
+        builders["metainfo"].add_item(text)
         # documents contain only one sentence.
         builders["audio"].end_document()
-        builders["text"].end_document()
+        builders["metainfo"].end_document()
 
     builders["audio"].finalize(f"{path_prefix}/audio.idx")
-    builders["text"].finalize(f"{path_prefix}/text.idx")
+    builders["metainfo"].finalize(f"{path_prefix}/metainfo.idx")
 
 
 if __name__ == "__main__":
     torch.set_num_threads(1)
-    parser = HfArgumentParser(MakeDataConfig)
-    conf = parser.parse_args_into_dataclasses()[0]
+    parser = HfArgumentParser([MakeDataConfig, TokenizerConfig])
+    (conf, tok_conf) = parser.parse_args_into_dataclasses()
     init_logger()
 
     assert conf.jsonl_path is not None
@@ -203,8 +242,10 @@ if __name__ == "__main__":
     chunks = [samples[i : i + num] for i in range(0, len(samples), num)]
     os.makedirs(conf.save_dir, exist_ok=True)
 
-    if conf.datatypes == "audio+text":
-        processor = build_audio_text
+    if conf.datatypes == "audio+metainfo":
+        processor = build_audio_and_metainfo
+    elif conf.datatypes == "texttoken":
+        processor = build_texttoken
     else:
         raise NotImplementedError()
 
@@ -215,11 +256,11 @@ if __name__ == "__main__":
         path_prefix = "{}/{:09d}".format(conf.save_dir, i)
         os.makedirs(path_prefix, exist_ok=True)
         shards_list.append(path_prefix)
-        pool.apply_async(processor, (chunk, path_prefix, i, num_chunks, conf))
+        pool.apply_async(processor, (chunk, path_prefix, i, num_chunks, conf, tok_conf))
 
     pool.close()
     pool.join()
 
     with open(f"{conf.save_dir}/data.list", "w", encoding="utf8") as fout:
         for name in shards_list:
-            fout.write(name + "\n")
+            fout.write(f"{name} {conf.datatypes}\n")
