@@ -65,6 +65,48 @@ class TrainConfig:
 
     _argument_group_name = "training"
 
+    training_log_req: int = field(
+        default=100,
+        metadata={
+            "help": (
+                "How often to log metrics to TensorBoard, in iterations."
+            ),
+        },
+    )
+    training_enable_wandb: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether to log metrics to Weights & Biases."
+            ),
+        },
+    )
+    training_enable_tensorboard: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether to log metrics to TensorBoard."
+            ),
+        },
+    )
+    training_save_tb_folder: str = field(
+        default="tensorboard",
+        metadata={
+            "help": (
+                "Folder to dump TensorBoard states."
+            ),
+        },
+    )
+    training_tb_rank_0_only: bool = field(
+        default=True,
+        metadata={
+            "help": (
+                "Whether to save TensorBoard metrics only for rank 0 or for all ranks. "
+                "When pipeline_parallel_degree is > 1, this option uses the 0th rank of the last stage pipeline group, "
+                "which is the only stage that computes loss metrics."
+            ),
+        },
+    )
     training_enable_cpu_offload: bool = field(
         default=False,
         metadata={
@@ -128,6 +170,12 @@ class TrainConfig:
         default=False,
         metadata={
             "help": ("Whether to compile the model"),
+        },
+    )
+    training_enable_compiled_autograd: bool = field(
+        default=False,
+        metadata={
+            "help": ("Enable CompiledAutograd to compile the backward."),
         },
     )
     training_gc_freq: int = field(
@@ -240,6 +288,14 @@ class TrainConfig:
         metadata={
             "help": (
                 "Whether to apply loss parallel when sequence parallel is enabled"
+            ),
+        },
+    )
+    training_enable_async_tensor_parallel: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether to apply async tensor parallel (currently only effective when compile is enabled)"
             ),
         },
     )
