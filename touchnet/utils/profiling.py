@@ -24,13 +24,13 @@ MEMORY_SNAPSHOT_MAX_ENTRIES = 100000
 @contextlib.contextmanager
 def maybe_enable_profiling(config: TrainConfig, *, global_step: int = 0):
     # get user defined profiler settings
-    enable_profiling = config.profiling.enable_profiling
+    enable_profiling = config.training_enable_profiling
 
     if enable_profiling:
         dump_dir = config.training_trace_dump_folder
-        save_trace_dir = config.profiling.save_traces_folder
+        save_trace_dir = config.training_profiling_traces_folder
         trace_dir = os.path.join(dump_dir, save_trace_dir)
-        profile_freq = config.profiling.profile_freq
+        profile_freq = config.training_profiling_freq
 
         rank = torch.distributed.get_rank()
 
@@ -75,10 +75,10 @@ def maybe_enable_profiling(config: TrainConfig, *, global_step: int = 0):
 
 @contextlib.contextmanager
 def maybe_enable_memory_snapshot(config: TrainConfig, *, global_step: int = 0):
-    enable_snapshot = config.profiling.enable_memory_snapshot
+    enable_snapshot = config.training_profiling_enable_memory_snapshot
     if enable_snapshot:
-        snapshot_folder = config.profiling.save_memory_snapshot_folder
-        snapshot_dir = os.path.join(config.job.dump_folder, snapshot_folder)
+        snapshot_folder = config.training_profiling_save_memory_snapshot_folder
+        snapshot_dir = os.path.join(config.training_trace_dump_folder, snapshot_folder)
         if not os.path.exists(snapshot_dir):
             os.makedirs(snapshot_dir, exist_ok=True)
         rank = torch.distributed.get_rank()
@@ -117,7 +117,7 @@ def maybe_enable_memory_snapshot(config: TrainConfig, *, global_step: int = 0):
                 )
 
         logger.info(f"Memory profiler active. Snapshot will be saved at {snapshot_dir}")
-        profiler = MemoryProfiler(global_step, config.profiling.profile_freq)
+        profiler = MemoryProfiler(global_step, config.training_profiling_freq)
         try:
             yield profiler
         except torch.OutOfMemoryError as e:

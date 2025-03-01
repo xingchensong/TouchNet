@@ -5,8 +5,10 @@
 # LICENSE file in the root directory of this source tree.
 
 import contextlib
+import gc
 import math
 import os
+import time
 from dataclasses import dataclass
 from datetime import timedelta
 from functools import cached_property
@@ -23,6 +25,12 @@ from torch.distributed.tensor import DTensor
 from touchnet.bin import TrainConfig
 from touchnet.utils.logging import logger
 
+TORCH_DTYPE_MAP = {
+    "float16": torch.float16,
+    "float32": torch.float32,
+    "bfloat16": torch.bfloat16,
+}
+
 
 def get_device_info():
     device_type = _get_available_device_type()
@@ -33,6 +41,25 @@ def get_device_info():
 
 
 device_type, device_module = get_device_info()
+
+
+# used to avoid stragglers in garbage collection
+class GarbageCollection:
+    def __init__(self, gc_freq=1000):
+        assert gc_freq > 0, "gc_freq must be a positive integer"
+        self.gc_freq = gc_freq
+        gc.disable()
+        self.collect("Initial GC collection.")
+
+    def run(self, step_count):
+        if step_count > 1 and step_count % self.gc_freq == 0:
+            self.collect("Peforming periodical GC collection.")
+
+    @staticmethod
+    def collect(reason: str):
+        begin = time.monotonic()
+        gc.collect(1)
+        logger.info("[GC] %s %.2f seconds.", reason, time.monotonic() - begin)
 
 
 @dataclass

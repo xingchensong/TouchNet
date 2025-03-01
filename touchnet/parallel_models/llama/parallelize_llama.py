@@ -18,10 +18,9 @@ from torch.distributed.tensor.parallel import (ColwiseParallel,
                                                parallelize_module)
 
 from touchnet.bin import TrainConfig
-from touchnet.parallel_models.helper_func import (TORCH_DTYPE_MAP, apply_ac,
-                                                  apply_compile, apply_ddp,
-                                                  apply_fsdp)
-from touchnet.utils.distributed import ParallelDims
+from touchnet.parallel_models.helper_func import (apply_ac, apply_compile,
+                                                  apply_ddp, apply_fsdp)
+from touchnet.utils.distributed import TORCH_DTYPE_MAP, ParallelDims
 from touchnet.utils.logging import logger
 
 
