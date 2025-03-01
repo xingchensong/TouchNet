@@ -6,6 +6,7 @@
 
 import logging
 import os
+from dataclasses import dataclass
 
 logger = logging.getLogger()
 
@@ -22,3 +23,29 @@ def init_logger():
 
     # suppress verbose torch.profiler logging
     os.environ["KINETO_LOG_LEVEL"] = "5"
+
+
+@dataclass(frozen=True)
+class Color:
+    black = "\033[30m"
+    red = "\033[31m"
+    green = "\033[32m"
+    yellow = "\033[33m"
+    blue = "\033[34m"
+    magenta = "\033[35m"
+    cyan = "\033[36m"
+    white = "\033[37m"
+    reset = "\033[39m"
+
+
+@dataclass(frozen=True)
+class NoColor:
+    black = ""
+    red = ""
+    green = ""
+    yellow = ""
+    blue = ""
+    magenta = ""
+    cyan = ""
+    white = ""
+    reset = ""

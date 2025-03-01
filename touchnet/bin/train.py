@@ -6,56 +6,98 @@
 
 import os
 import time
+from dataclasses import asdict, dataclass, field
 from datetime import timedelta
+from io import BytesIO
+from typing import Any, Dict, List
 
 import torch
+from torch.distributed.checkpoint.stateful import Stateful
 from torch.distributed.elastic.multiprocessing.errors import record
-from torchtitan.components.checkpoint import CheckpointManager, TrainState
-from torchtitan.config_manager import JobConfig
-from torchtitan.distributed import ParallelDims
-from torchtitan.distributed import utils as dist_utils
-from torchtitan.protocols.model_converter import build_model_converters
-from torchtitan.protocols.train_spec import get_train_spec
+from transformers.hf_argparser import HfArgumentParser
 
-from touchnet.utils.logging import init_logger, logger
+from touchnet.bin import TrainConfig
+from touchnet.data import DataConfig
+from touchnet.tokenizer import TokenizerConfig
+from touchnet.utils.checkpoint import CheckpointManager
+from touchnet.utils.distributed import (GarbageCollection, ParallelDims,
+                                        clip_grad_norm_,
+                                        create_context_parallel_ctx,
+                                        device_module, device_type, dist_max,
+                                        dist_mean, get_train_context,
+                                        init_distributed, set_determinism,
+                                        set_pg_timeouts)
+from touchnet.utils.logging import Color, init_logger, logger
 from touchnet.utils.metrics import (build_device_memory_monitor,
                                     build_metric_logger)
 from touchnet.utils.profiling import (maybe_enable_memory_snapshot,
                                       maybe_enable_profiling)
 
 
+@dataclass
+class TrainState(Stateful):
+    step: int = 0
+    global_avg_losses: List[float] = field(default_factory=list)
+    global_max_losses: List[float] = field(default_factory=list)
+    log_steps: List[int] = field(default_factory=list)
+
+    def state_dict(self) -> Dict[str, Any]:
+        # Only checkpoint global_avg_losses and global_max_losses per log frequency
+        # to avoid sync overhead in every iteration.
+        global_avg_losses_bytes = BytesIO()
+        torch.save(self.global_avg_losses, global_avg_losses_bytes)
+        global_max_losses_bytes = BytesIO()
+        torch.save(self.global_max_losses, global_max_losses_bytes)
+        log_steps_bytes = BytesIO()
+        torch.save(self.log_steps, log_steps_bytes)
+        return {
+            "step": torch.tensor(self.step, dtype=torch.int32),
+            "global_avg_losses": global_avg_losses_bytes,
+            "global_max_losses": global_max_losses_bytes,
+            "log_steps": log_steps_bytes,
+        }
+
+    def load_state_dict(self, state_dict) -> None:
+        self.step = state_dict["step"].item()
+        state_dict["global_avg_losses"].seek(0)
+        self.global_avg_losses = torch.load(
+            state_dict["global_avg_losses"], weights_only=False
+        )
+        state_dict["global_max_losses"].seek(0)
+        self.global_max_losses = torch.load(
+            state_dict["global_max_losses"], weights_only=False
+        )
+        state_dict["log_steps"].seek(0)
+        self.log_steps = torch.load(state_dict["log_steps"], weights_only=False)
+
+
 # Enable debug tracing on failure: https://pytorch.org/docs/stable/elastic/errors.html
 @record
-def main(job_config: JobConfig):
-    logger.info(f"Starting job: {job_config.job.description}")
+def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config: TrainConfig):
+    logger.info(f"Starting job: {job_config.training_description}")
 
-    if job_config.experimental.custom_model_path:
-        utils.import_module_from_path(job_config.experimental.custom_model_path)
-
-    if job_config.job.print_args:
-        logger.info(f"Running with args: {job_config.to_dict()}")
-
-    # used for colorful printing
-    color = utils.NoColor if job_config.metrics.disable_color_printing else utils.Color
+    if job_config.training_print_args:
+        logger.info(f"Running with tokenizer args: {asdict(tokenizer_config)}")
+        logger.info(f"                  data args: {asdict(data_config)}")
+        logger.info(f"              training args: {asdict(job_config)}")
 
     # take control of garbage collection to avoid stragglers
-    gc_handler = utils.GarbageCollection(gc_freq=job_config.training.gc_freq)
+    gc_handler = GarbageCollection(gc_freq=job_config.training_gc_freq)
 
     # init distributed
     world_size = int(os.environ["WORLD_SIZE"])
     parallel_dims = ParallelDims(
-        dp_shard=job_config.training.data_parallel_shard_degree,
-        dp_replicate=job_config.training.data_parallel_replicate_degree,
-        cp=job_config.experimental.context_parallel_degree,
-        tp=job_config.training.tensor_parallel_degree,
-        pp=job_config.experimental.pipeline_parallel_degree,
+        dp_shard=job_config.training_data_parallel_shard_degree,
+        dp_replicate=job_config.training_data_parallel_replicate_degree,
+        cp=job_config.training_context_parallel_degree,
+        tp=job_config.training_tensor_parallel_degree,
+        pp=job_config.training_pipeline_parallel_degree,
         world_size=world_size,
-        enable_loss_parallel=not job_config.training.disable_loss_parallel,
+        enable_loss_parallel=job_config.training_enable_loss_parallel,
     )
-    device_module, device_type = utils.device_module, utils.device_type
     device = torch.device(f"{device_type}:{int(os.environ['LOCAL_RANK'])}")
     device_module.set_device(device)
-    dist_utils.init_distributed(job_config)
+    init_distributed(job_config)
     # initialize device memory monitor and get peak flops for MFU calculation
     device_memory_monitor = build_device_memory_monitor()
     gpu_peak_flops = utils.get_peak_flops(device_memory_monitor.device_name)
@@ -73,7 +115,7 @@ def main(job_config: JobConfig):
         pp_mesh = world_mesh["pp"]
 
     # Set random seed, and maybe enable deterministic mode (mainly for debugging, expect perf loss)
-    dist_utils.set_determinism(
+    set_determinism(
         world_mesh, device, job_config.training.seed, job_config.training.deterministic
     )
     train_spec = get_train_spec(job_config.model.name)
@@ -104,10 +146,6 @@ def main(job_config: JobConfig):
     with torch.device("meta"):
         model = model_cls.from_model_args(model_config)
 
-    # Build the collection of model converters. No-op if `model.converters` empty
-    model_converters = build_model_converters(job_config, parallel_dims)
-    model_converters.convert(model)
-
     # log model size
     model_param_count = utils.get_num_params(model)
     num_flop_per_token = utils.get_num_flop_per_token(
@@ -116,8 +154,8 @@ def main(job_config: JobConfig):
         job_config.training.seq_len,
     )
     logger.info(
-        f"{color.blue}Model {train_spec.name} {job_config.model.flavor} "
-        f"{color.red}size: {model_param_count:,} total parameters{color.reset}"
+        f"{Color.blue}Model {train_spec.name} {job_config.model.flavor} "
+        f"{Color.red}size: {model_param_count:,} total parameters{Color.reset}"
     )
 
     # move sharded model to CPU/GPU and initialize weights via DTensor
@@ -181,12 +219,6 @@ def main(job_config: JobConfig):
     # build optimizer after applying parallelisms to the model
     optimizers = train_spec.build_optimizers_fn(model_parts, job_config)
     lr_schedulers = train_spec.build_lr_schedulers_fn(optimizers, job_config)
-    # Post optimizer step model converters hook.
-    # e.g. calculate float8 dynamic amax/scale for all-parameter for FSDP2
-    # where it issues a single all-reduce for all parameters at once for better performance
-    optimizers.register_step_post_hook(
-        lambda *args, **kwargs: model_converters.post_optimizer_hook(model_parts)
-    )
 
     train_state = TrainState()
 
@@ -227,7 +259,7 @@ def main(job_config: JobConfig):
 
     data_iterator = iter(dataloader)
 
-    train_context = dist_utils.get_train_context(
+    train_context = get_train_context(
         parallel_dims.loss_parallel_enabled,
         job_config.experimental.enable_compiled_autograd,
     )
@@ -270,7 +302,7 @@ def main(job_config: JobConfig):
             # apply context parallelism if cp is enabled
             # ensure CP handles the separate freqs_cis buffer for each pp stage
             optional_context_parallel_ctx = (
-                dist_utils.create_context_parallel_ctx(
+                create_context_parallel_ctx(
                     cp_mesh=world_mesh["cp"],
                     cp_buffers=[input_ids, labels] + [m.freqs_cis for m in model_parts],
                     cp_seq_dims=[1, 1] + [0 for _ in model_parts],
@@ -308,7 +340,7 @@ def main(job_config: JobConfig):
                     loss.backward()
 
             # clip gradients
-            dist_utils.clip_grad_norm_(
+            clip_grad_norm_(
                 [p for m in model_parts for p in m.parameters()],
                 job_config.training.max_norm,
                 foreach=True,
@@ -332,8 +364,8 @@ def main(job_config: JobConfig):
                 ):
                     loss = loss.detach()
                     global_avg_loss, global_max_loss = (
-                        dist_utils.dist_mean(loss, world_mesh["dp_cp"]),
-                        dist_utils.dist_max(loss, world_mesh["dp_cp"]),
+                        dist_mean(loss, world_mesh["dp_cp"]),
+                        dist_max(loss, world_mesh["dp_cp"]),
                     )
                 else:
                     global_avg_loss = global_max_loss = loss.item()
@@ -380,13 +412,13 @@ def main(job_config: JobConfig):
                 metric_logger.log(metrics, step=train_state.step)
 
                 logger.info(
-                    f"{color.red}step: {train_state.step:2}  "
-                    f"{color.green}loss: {global_avg_loss:7.4f}  "
-                    f"{color.yellow}memory: {device_mem_stats.max_reserved_gib:5.2f}GiB"
+                    f"{Color.red}step: {train_state.step:2}  "
+                    f"{Color.green}loss: {global_avg_loss:7.4f}  "
+                    f"{Color.yellow}memory: {device_mem_stats.max_reserved_gib:5.2f}GiB"
                     f"({device_mem_stats.max_reserved_pct:.2f}%)  "
-                    f"{color.blue}tps: {round(tps):,}  "
-                    f"{color.cyan}tflops: {tflops:,.2f}  "
-                    f"{color.magenta}mfu: {mfu:.2f}%{color.reset}"
+                    f"{Color.blue}tps: {round(tps):,}  "
+                    f"{Color.cyan}tflops: {tflops:,.2f}  "
+                    f"{Color.magenta}mfu: {mfu:.2f}%{Color.reset}"
                 )
 
                 ntokens_since_last_log = 0
@@ -407,7 +439,7 @@ def main(job_config: JobConfig):
             # reduce timeout after first train step for faster signal
             # (assuming lazy init and compilation are finished)
             if train_state.step == 1:
-                dist_utils.set_pg_timeouts(
+                set_pg_timeouts(
                     timeout=timedelta(seconds=job_config.comm.train_timeout_seconds),
                     world_mesh=world_mesh,
                 )
@@ -422,7 +454,7 @@ def main(job_config: JobConfig):
 
 if __name__ == "__main__":
     init_logger()
-    config = JobConfig()
-    config.parse_args()
-    main(config)
+    parser = HfArgumentParser([TokenizerConfig, DataConfig, TrainConfig])
+    (tok_conf, data_conf, train_conf) = parser.parse_args_into_dataclasses()
+    main(tok_conf, data_conf, train_conf)
     torch.distributed.destroy_process_group()

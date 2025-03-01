@@ -22,13 +22,6 @@ from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import \
 from touchnet.bin import TrainConfig
 from touchnet.utils.logging import logger
 
-TORCH_DTYPE_MAP = {
-    "float16": torch.float16,
-    "float32": torch.float32,
-    "bfloat16": torch.bfloat16,
-}
-
-
 # for selective op activation checkpointing
 _save_list = {
     torch.ops.aten.mm.default,
