@@ -65,6 +65,23 @@ class TrainConfig:
 
     _argument_group_name = "training"
 
+    # model configs
+    training_model_name: str = field(
+        default="llama",
+        metadata={
+            "help": (
+                "model type."
+            ),
+        },
+    )
+    training_model_config_path: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "path to model config file. huggingface style json file."
+            ),
+        },
+    )
     # metrics/logging configs
     training_description: str = field(
         default="default job",
@@ -82,7 +99,7 @@ class TrainConfig:
             ),
         },
     )
-    training_log_req: int = field(
+    training_log_freq: int = field(
         default=100,
         metadata={
             "help": (
@@ -318,6 +335,62 @@ class TrainConfig:
             ),
         },
     )
+    training_pipeline_parallel_degree: int = field(
+        default=1,
+        metadata={
+            "help": (
+                "Pipeline Parallelism degree, or number of ranks. 1 means disabled. "
+                "If using looped schedules, this still specifies the number of physical ranks, not the number "
+                "of stages. Stages per rank are inferred from split points degree, and schedule."
+            ),
+        },
+    )
+    training_pipeline_parallel_split_points: str = field(
+        default="",
+        metadata={
+            "help": (
+                "Specify comma-separated names of modules to use as the beginning of a split point. "
+                "e.g. \"layers.0,layers.2\" will cause the model to be split into 3 stages, "
+                "the first containing all the layers up to layers.0, "
+                "the second containing layers.0 and up to layers.2, "
+                "the third containing layers.2 and all the remaining layers. "
+                "Note: fully-automated splitting may be enabled in the future, "
+                "but currently the split points must be specified manually."
+            ),
+        },
+    )
+    training_pipeline_parallel_schedule: str = field(
+        default="1F1B",
+        metadata={
+            "help": (
+                "Specify the Pipeline Parallel schedule to use. The supported schedules are: "
+                "https://github.com/pytorch/pytorch/blob/de4c2a3b4e89d96334dc678d1c3f2ae51a6630a0/torch/distributed/pipelining/schedules.py#L2161. "
+                "The schedule must be compatible with the split points and stages_per_rank. "
+                "Looped schedules (e.g. Interleaved1F1B) require specifying pipeline_parallel_degree = number of ranks, "
+                "and split_points = number of stages - 1"
+            ),
+        },
+    )
+    training_pipeline_parallel_schedule_csv: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "Specify the path to the pipeline parallel schedule csv file to use. "
+                "The pipeline_parallel_schedule argument must be either "
+                "PipelineScheduleSingle, PipelineScheduleMulti, or _PipelineScheduleRuntime."
+            ),
+        },
+    )
+    training_pipeline_parallel_microbatches: int = field(
+        default=None,
+        metadata={
+            "help": (
+                "How many microbatches to split the global training batch into when using pipeline parallelism. "
+                "The global training batch size must be evenly divisible by the number of microbatches. "
+                "The default value will be the number of pipeline stages, if unspecified."
+            ),
+        },
+    )
     training_fsdp_reshard_after_forward: str = field(
         default="default",
         metadata={
@@ -471,6 +544,16 @@ class TrainConfig:
         metadata={
             "help": (
                 "Load the checkpoint at the specified step. If -1, load the latest checkpoint."
+            ),
+        },
+    )
+    training_create_seed_ckpt: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Initializes the full model without applying parallelisms, and then saves it as a seed checkpoint. "
+                "Note: requires user to call train.py without specifying any parallelisms, e.g. NGPU=1. "
+                "Could be implemented as a separate script, but this way shares more code."
             ),
         },
     )

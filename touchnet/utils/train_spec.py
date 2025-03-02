@@ -7,40 +7,17 @@
 # Copyright (c) Meta Platforms, Inc. All Rights Reserved.
 
 from dataclasses import dataclass
-from typing import Callable, Protocol, Type, TypeAlias
+from typing import Callable, Type, TypeAlias
 
 import torch
 import torch.nn as nn
 from torch.distributed.pipelining.schedules import _PipelineSchedule
+from transformers import AutoConfig
 
 from touchnet.bin import TrainConfig
 from touchnet.data.dataloader import BaseDataLoader
 from touchnet.tokenizer import BaseTokenizer
 from touchnet.utils.optimizer import LRSchedulersContainer, OptimizersContainer
-
-
-@dataclass
-class BaseModelArgs:
-    """All ModelArgs should inherit from this class.
-
-    The only usage of this class is type checking but allows us to extend common
-    arguments to all models in the future.
-    """
-
-    _enforced: str = "This field is used to enforce all fields have defaults."
-
-
-class ModelProtocol(Protocol):
-    """Defines the interface for a model class.
-
-    This is used to enforce that all model classes have some methods that are
-    required by the TorchTitan trainer.
-    """
-
-    @classmethod
-    def from_model_args(cls, args: BaseModelArgs) -> nn.Module:
-        ...
-
 
 OptimizersBuilder: TypeAlias = Callable[
     [list[nn.Module], TrainConfig], OptimizersContainer
@@ -54,8 +31,8 @@ TokenizerBuilder: TypeAlias = Callable[..., BaseTokenizer]
 @dataclass
 class TrainSpec:
     name: str
-    cls: Type[nn.Module]
-    config: dict[str, BaseModelArgs]
+    model_cls: Type[nn.Module]
+    config_cls: Type[AutoConfig]
     parallelize_fn: Callable[[nn.Module], None]
     pipelining_fn: Callable[
         [nn.Module], tuple[_PipelineSchedule, list[nn.Module], bool, bool]

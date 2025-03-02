@@ -29,9 +29,12 @@ from touchnet.utils.distributed import (GarbageCollection, ParallelDims,
                                         set_pg_timeouts)
 from touchnet.utils.logging import Color, init_logger, logger
 from touchnet.utils.metrics import (build_device_memory_monitor,
-                                    build_metric_logger)
+                                    build_metric_logger,
+                                    get_num_flop_per_token, get_num_params,
+                                    get_peak_flops)
 from touchnet.utils.profiling import (maybe_enable_memory_snapshot,
                                       maybe_enable_profiling)
+from touchnet.utils.train_spec import get_train_spec
 
 
 @dataclass
@@ -100,7 +103,7 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
     init_distributed(job_config)
     # initialize device memory monitor and get peak flops for MFU calculation
     device_memory_monitor = build_device_memory_monitor()
-    gpu_peak_flops = utils.get_peak_flops(device_memory_monitor.device_name)
+    gpu_peak_flops = get_peak_flops(device_memory_monitor.device_name)
     logger.info(f"Peak FLOPS used for computing MFU: {gpu_peak_flops:.3e}")
 
     # build meshes
@@ -116,58 +119,52 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
 
     # Set random seed, and maybe enable deterministic mode (mainly for debugging, expect perf loss)
     set_determinism(
-        world_mesh, device, job_config.training.seed, job_config.training.deterministic
+        world_mesh, device, job_config.training_seed, job_config.training_deterministic
     )
-    train_spec = get_train_spec(job_config.model.name)
+    train_spec = get_train_spec(job_config.training_model_name)
 
     # build dataloader
-    tokenizer = train_spec.tokenizer_cls(job_config.model.tokenizer_path)
+    tokenizer = train_spec.build_tokenizer_fn(tokenizer_config)
     dataloader = train_spec.build_dataloader_fn(
-        dp_world_size=dp_degree,
+        tokenizer_config=tokenizer_config,
+        data_config=data_config,
         dp_rank=dp_rank,
-        tokenizer=tokenizer,
-        job_config=job_config,
+        dp_world_size=dp_degree,
     )
 
     # build model (using meta init)
-    model_cls = train_spec.cls
-    model_config = train_spec.config[job_config.model.flavor]
-    # set the model configs from training inputs:
-    # 1. norm type to decide which norm layer to use
-    # 2. vocab size from tokenizer
-    # 3. max_seq_len base on inputs
-    model_config.norm_type = job_config.model.norm_type
-    model_config.vocab_size = tokenizer.n_words
-    model_config.max_seq_len = job_config.training.seq_len
+    model_cls = train_spec.model_cls
+    config_cls = train_spec.config_cls
+    model_config = config_cls.from_pretrained(job_config.training_model_config_path)
+    assert model_config.vocab_size == tokenizer.vocab_size
 
     logger.info(
-        f"Building {train_spec.name} {job_config.model.flavor} with {model_config}"
+        f"Building {train_spec.name} with {model_config}"
     )
     with torch.device("meta"):
-        model = model_cls.from_model_args(model_config)
+        model = model_cls.from_config(model_config)
+        # defer weight initialization until after parallelisms are applied
+        model.apply(lambda m: setattr(m, "_is_hf_initialized", False))
 
     # log model size
-    model_param_count = utils.get_num_params(model)
-    num_flop_per_token = utils.get_num_flop_per_token(
-        utils.get_num_params(model, exclude_embedding=True),
+    model_param_count = get_num_params(model)
+    # TODO(xcsong): support encoder-decoder flops
+    num_flop_per_token = get_num_flop_per_token(
+        get_num_params(model, exclude_embedding=True),
         model_config,
-        job_config.training.seq_len,
+        data_config.dataset_audio_seqlen,
     )
     logger.info(
-        f"{Color.blue}Model {train_spec.name} {job_config.model.flavor} "
         f"{Color.red}size: {model_param_count:,} total parameters{Color.reset}"
     )
 
     # move sharded model to CPU/GPU and initialize weights via DTensor
-    if job_config.checkpoint.create_seed_checkpoint:
+    if job_config.training_create_seed_ckpt:
         init_device = "cpu"
-        buffer_device = None
-    elif job_config.training.enable_cpu_offload:
+    elif job_config.training_enable_cpu_offload:
         init_device = "cpu"
-        buffer_device = device_type
     else:
         init_device = device_type
-        buffer_device = None
 
     # apply parallelisms and initialization
     if parallel_dims.pp_enabled:
@@ -197,14 +194,14 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
             train_spec.parallelize_fn(m, world_mesh, parallel_dims, job_config)
             m.to_empty(device=init_device)
             with torch.no_grad():
-                m.init_weights(buffer_device=buffer_device)
+                m.post_init()
             m.train()
     else:
         # apply PT-D Tensor Parallel, activation checkpointing, torch.compile, Data Parallel
         train_spec.parallelize_fn(model, world_mesh, parallel_dims, job_config)
         model.to_empty(device=init_device)
         with torch.no_grad():
-            model.init_weights(buffer_device=buffer_device)
+            model.post_init()
         model.train()
 
         model_parts = [model]
@@ -232,23 +229,23 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
         job_config=job_config,
     )
 
-    if job_config.checkpoint.create_seed_checkpoint:
+    if job_config.training_create_seed_ckpt:
         assert (
             world_size == 1
         ), "Must create seed checkpoint using a single device, to disable sharding"
         assert (
-            job_config.checkpoint.enable_checkpoint
+            job_config.training_enable_ckpt
         ), "Must enable checkpointing when creating a seed checkpoint"
         checkpoint.save(curr_step=0, force=True)
         logger.info("Created seed checkpoint")
         return
 
-    checkpoint.load(step=job_config.checkpoint.load_step)
+    checkpoint.load(step=job_config.training_ckpt_load_step)
     metric_logger = build_metric_logger(job_config, parallel_dims)
 
     # plot losses loaded from checkpoint (if any) to TensorBoard
     # NOTE: Loss info after the last log step before checkpoint saving will not be ploted.
-    #       This can be avoided by setting checkpoint.interval to be a multiple of metrics.log_freq
+    #       This can be avoided by setting training_ckpt_interval to be a multiple of training_log_freq
     if train_state.step > 0:
         for idx, step in enumerate(train_state.log_steps):
             metrics = {
@@ -261,7 +258,7 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
 
     train_context = get_train_context(
         parallel_dims.loss_parallel_enabled,
-        job_config.experimental.enable_compiled_autograd,
+        job_config.training_enable_compiled_autograd,
     )
 
     # variables used to keep info for metrics logging
@@ -271,54 +268,70 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
     device_memory_monitor.reset_peak_stats()
 
     # train loop
+    # TODO(xcsong): support gradient accumalation steps?
     logger.info(
         f"Training starts at step {train_state.step + 1}, "
-        f"with local batch size {job_config.training.batch_size}, "
-        f"global batch size {job_config.training.batch_size * dp_degree}, "
-        f"sequence length {job_config.training.seq_len}, "
-        f"total steps {job_config.training.steps} "
-        f"(warmup {job_config.training.warmup_steps})"
+        f"with local batch size {data_config.dataset_batchsize}, "
+        f"global batch size {data_config.dataset_batchsize * dp_degree}, "
+        f"sequence length {data_config.dataset_audio_seqlen}, "
+        f"total steps {job_config.training_steps} "
+        f"(warmup {job_config.training_warmup_steps})"
     )
     with maybe_enable_profiling(
         job_config, global_step=train_state.step
     ) as torch_profiler, maybe_enable_memory_snapshot(
         job_config, global_step=train_state.step
     ) as memory_profiler:
-        while train_state.step < job_config.training.steps:
+        while train_state.step < job_config.training_steps:
             train_state.step += 1
             gc_handler.run(train_state.step)
 
             # get batch
             data_load_start = time.perf_counter()
             batch = next(data_iterator)
-            input_ids, labels = batch
+            inputs_embeds, labels, position_ids = batch["inputs_embeds"], batch["labels"], batch["position_ids"]
             ntokens_since_last_log += labels.numel()
             data_loading_times.append(time.perf_counter() - data_load_start)
 
-            input_ids = input_ids.to(device_type)
+            """
+            TODO[flame]: We need to carefully handle the position_ids for TP/CP
+            Depending on the Models'PE, the position_ids might be different.
+
+            e.g. for TP
+                For RoPE, all ranks have the same position_ids. [FOR HF model]
+                For sinusoidal, each rank has the coresponding chunked  position_ids. [FOR HF model]
+
+            e.g. for CP, [optional_context_parallel_ctx shoudl automatically distbute the position_ids]
+                Each rank has the coresponding chunked position_ids. [FOR All model]
+
+            """
+            inputs_embeds = inputs_embeds.to(device_type)
             labels = labels.to(device_type)
+            position_ids = position_ids.to(device_type)
             optimizers.zero_grad()
 
             # apply context parallelism if cp is enabled
             # ensure CP handles the separate freqs_cis buffer for each pp stage
+            # TODO(xcsong): handle position_ids here?
             optional_context_parallel_ctx = (
                 create_context_parallel_ctx(
                     cp_mesh=world_mesh["cp"],
-                    cp_buffers=[input_ids, labels] + [m.freqs_cis for m in model_parts],
-                    cp_seq_dims=[1, 1] + [0 for _ in model_parts],
-                    cp_no_restore_buffers={input_ids, labels},
-                    cp_rotate_method=job_config.experimental.context_parallel_rotate_method,
+                    cp_buffers=[inputs_embeds, labels, position_ids],
+                    cp_seq_dims=[1, 1, 1],
+                    cp_no_restore_buffers={inputs_embeds, labels, position_ids},
+                    cp_rotate_method=job_config.training_context_parallel_rotate_method,
                 )
                 if parallel_dims.cp_enabled
                 else None
             )
 
             if parallel_dims.pp_enabled:
+                # TODO[xcsong], we should distribute the position_ids as well with CP, currently we just disable pp.
                 # Pipeline Parallel forward / backward inside step() call
                 with train_context(optional_context_parallel_ctx):
                     targets, losses = (labels, []) if has_last_stage else (None, None)
                     if has_first_stage:
-                        pp_schedule.step(input_ids, target=targets, losses=losses)
+                        pp_schedule.step(inputs_embeds, target=targets, losses=losses)
                     else:
                         pp_schedule.step(target=targets, losses=losses)
 
@@ -332,7 +345,10 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
             else:
                 # Non-PP forward / backward
                 with train_context(optional_context_parallel_ctx):
-                    pred = model(input_ids)
+                    pred = model(
+                        inputs_embeds=inputs_embeds,
+                        position_ids=position_ids,
+                    )
                     loss = train_spec.loss_fn(pred, labels)
                     # pred.shape=(bs, seq_len, vocab_size)
                     # need to free to before bwd to avoid peaking memory
@@ -342,20 +358,21 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
             # clip gradients
             clip_grad_norm_(
                 [p for m in model_parts for p in m.parameters()],
-                job_config.training.max_norm,
+                job_config.training_max_norm,
                 foreach=True,
                 pp_mesh=pp_mesh if parallel_dims.pp_enabled else None,
             )
 
             # optimizer step
             checkpoint.maybe_wait_for_staging()
+            # TODO(xcsong): skip nan norm here?
             optimizers.step()
             lr_schedulers.step()
 
             # log metrics
             if (
                 train_state.step == 1
-                or train_state.step % job_config.metrics.log_freq == 0
+                or train_state.step % job_config.training_log_freq == 0
             ):
                 if (
                     parallel_dims.dp_replicate_enabled
@@ -387,7 +404,7 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
                 mfu = 100 * num_flop_per_token * tps / gpu_peak_flops
                 tflops = num_flop_per_token * tps / 1e12
 
-                time_end_to_end = time_delta / job_config.metrics.log_freq
+                time_end_to_end = time_delta / job_config.training_log_freq
                 time_data_loading = sum(data_loading_times) / len(data_loading_times)
                 time_data_loading_pct = 100 * sum(data_loading_times) / time_delta
 
@@ -427,7 +444,7 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
                 device_memory_monitor.reset_peak_stats()
 
             checkpoint.save(
-                train_state.step, force=(train_state.step == job_config.training.steps)
+                train_state.step, force=(train_state.step == job_config.training_steps)
             )
 
             # signal the profiler that the next profiling step has started
@@ -440,7 +457,7 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
             # (assuming lazy init and compilation are finished)
             if train_state.step == 1:
                 set_pg_timeouts(
-                    timeout=timedelta(seconds=job_config.comm.train_timeout_seconds),
+                    timeout=timedelta(seconds=job_config.training_train_timeout_seconds),
                     world_mesh=world_mesh,
                 )
 

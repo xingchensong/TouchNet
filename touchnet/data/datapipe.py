@@ -95,11 +95,12 @@ class TouchDatapipe(IterableDataset, Stateful):
                     metainfo = _dataset.get(sample_idx, "metainfo")
                     metainfo = metainfo.tobytes().decode('utf-8')
                     metainfo = json.loads(metainfo.strip())
+                    metainfo["datatypes"] = "metainfo"
                     yield metainfo
                 elif self.lists[list_idx]["datatypes"] == "texttoken":
                     # for text pre-training
                     texttoken = _dataset.get(sample_idx, "texttoken").tolist()
-                    yield dict(input_ids=texttoken)
+                    yield dict(input_ids=texttoken, datatypes="texttoken")
                 elif self.lists[list_idx]["datatypes"] == "audio":
                     # for audio pre-training
                     if self.config.dataset_random_cut_audio:
@@ -108,7 +109,7 @@ class TouchDatapipe(IterableDataset, Stateful):
                         pass
                     else:
                         audio = _dataset.get(sample_idx, "audio")
-                    yield dict(audio=audio)
+                    yield dict(audio=audio, datatypes="audio")
                 elif self.lists[list_idx]["datatypes"] == "audio+metainfo":
                     # for audio-text alignment
                     metainfo = _dataset.get(sample_idx, "metainfo")
@@ -132,6 +133,7 @@ class TouchDatapipe(IterableDataset, Stateful):
                     audio = _dataset.get(sample_idx, "audio", offset=offset, length=length)
                     audio = audio.astype(numpy.float32) / 32768.0  # normalize to [-1.0, 1.0]
                     metainfo["waveform"] = torch.from_numpy(audio).unsqueeze(0)  # [1, T]
+                    metainfo["datatypes"] = "audio+metainfo"
                     yield metainfo
                 else:
                     raise NotImplementedError(f"unsupported datatypes: {self.lists[list_idx]['datatypes']}")

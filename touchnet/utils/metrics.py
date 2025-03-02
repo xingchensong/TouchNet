@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
+import subprocess
 from collections import namedtuple
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -15,6 +16,71 @@ from torch.utils.tensorboard import SummaryWriter
 from touchnet.bin import TrainConfig
 from touchnet.utils.distributed import ParallelDims, device_module, device_type
 from touchnet.utils.logging import logger
+
+
+def get_num_params(model: torch.nn.Module, exclude_embedding: bool = False) -> int:
+    num_params = sum(p.numel() for p in model.parameters())
+    if exclude_embedding:
+        num_params -= sum(
+            sum(p.numel() for p in m.parameters())
+            for m in model.children()
+            if isinstance(m, torch.nn.Embedding)
+        )
+    return num_params
+
+
+def get_num_flop_per_token(num_params: int, model_config, seq_len) -> int:
+    l, h, q, t = (
+        model_config.num_hidden_layers,
+        model_config.num_attention_heads,
+        model_config.hidden_size // model_config.num_attention_heads,
+        seq_len,
+    )
+    # Reasoning behind the factor of 12 for the self-attention part of the formula:
+    # 1. each self-attention has 2 matmul in the forward and 4 in the backward (6)
+    # 2. the flash attention does 1 more matmul recomputation in the backward
+    #    but recomputation should not be counted in calculating MFU           (+0)
+    # 3. each matmul performs 1 multiplication and 1 addition                 (*2)
+    # 4. we follow the convention and do not account for sparsity in causal attention
+    flop_per_token = 6 * num_params + 12 * l * h * q * t
+
+    return flop_per_token
+
+
+# hardcoded BF16 type peak flops for NVIDIA A100, H100, and H200 GPU
+def get_peak_flops(device_name: str) -> int:
+    try:
+        # Run the lspci command and capture the output
+        result = subprocess.run(["lspci"], stdout=subprocess.PIPE, text=True)
+        # Filter the output for lines containing both "NVIDIA" and "H100"
+        filtered_lines = [
+            line
+            for line in result.stdout.splitlines()
+            if "NVIDIA" in line and "H100" in line
+        ]
+        # Join all filtered lines into a single string
+        device_name = " ".join(filtered_lines) or device_name
+    except FileNotFoundError as e:
+        logger.warning(f"Error running lspci: {e}, fallback to use device_name")
+    if "A100" in device_name:
+        # data from https://www.nvidia.com/en-us/data-center/a100/
+        return 312e12
+    elif "H100" in device_name:
+        # data from https://www.nvidia.com/en-us/data-center/h100/
+        # NOTE: Specifications are one-half lower without sparsity.
+        if "NVL" in device_name:
+            return 835e12
+        elif "PCIe" in device_name:
+            return 756e12
+        else:  # for H100 SXM and other variants
+            return 989e12
+    elif "H200" in device_name:
+        # data from https://www.nvidia.com/en-us/data-center/h200/
+        return 989e12
+    else:  # for other GPU types, assume A100
+        logger.warning(f"Peak flops undefined for: {device_name}, fallback to A100")
+        return 312e12
+
 
 # named tuple for passing device memory stats for logging
 DeviceMemStats = namedtuple(
