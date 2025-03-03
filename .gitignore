@@ -173,3 +173,12 @@ cython_debug/
 # Unit test
 tests/
 examples/test/
+
+# Data
+*.bin
+*.idx
+*.log
+data.list
+
+# Experiments
+exp/

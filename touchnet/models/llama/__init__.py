@@ -1,10 +1,10 @@
 import torch
 from transformers import AutoConfig, AutoModelForCausalLM
 
-from touchnet.data import build_dataloader
-from touchnet.parallel_models.llama.parallelize_llama import parallelize_llama
-from touchnet.parallel_models.llama.pipeline_llama import pipeline_llama
-from touchnet.tokenizer import build_tokenizer
+from touchnet.data.dataloader import build_dataloader
+from touchnet.models.llama.parallelize_llama import parallelize_llama
+from touchnet.models.llama.pipeline_llama import pipeline_llama
+from touchnet.tokenizer.tokenizer import build_tokenizer
 from touchnet.utils.optimizer import build_lr_schedulers, build_optimizers
 from touchnet.utils.train_spec import TrainSpec, register_train_spec
 

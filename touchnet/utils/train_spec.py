@@ -16,7 +16,7 @@ from transformers import AutoConfig
 
 from touchnet.bin import TrainConfig
 from touchnet.data.dataloader import BaseDataLoader
-from touchnet.tokenizer import BaseTokenizer
+from touchnet.tokenizer.tokenizer import BaseTokenizer
 from touchnet.utils.optimizer import LRSchedulersContainer, OptimizersContainer
 
 OptimizersBuilder: TypeAlias = Callable[

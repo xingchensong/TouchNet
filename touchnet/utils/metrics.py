@@ -62,7 +62,7 @@ def get_peak_flops(device_name: str) -> int:
         device_name = " ".join(filtered_lines) or device_name
     except FileNotFoundError as e:
         logger.warning(f"Error running lspci: {e}, fallback to use device_name")
-    if "A100" in device_name:
+    if "A100" in device_name or "A800" in device_name:
         # data from https://www.nvidia.com/en-us/data-center/a100/
         return 312e12
     elif "H100" in device_name:
@@ -77,6 +77,8 @@ def get_peak_flops(device_name: str) -> int:
     elif "H200" in device_name:
         # data from https://www.nvidia.com/en-us/data-center/h200/
         return 989e12
+    elif "3090" in device_name:
+        return 71e12
     else:  # for other GPU types, assume A100
         logger.warning(f"Peak flops undefined for: {device_name}, fallback to A100")
         return 312e12

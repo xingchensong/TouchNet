@@ -1,14 +1,3 @@
-# export TORCH_NCCL_BLOCKING_WAIT=1
-# export TORCH_NCCL_ASYNC_ERROR_HANDLING=1
-# export NCCL_TIMEOUT=1800000000
-# export NCCL_LAUNCH_TIMEOUT=6000000000000
-# export NCCL_SOCKET_TIMEOUT=3000000000000
-export HF_HOME=/bucket/output/jfs-hdfs/user/xingchen.song/share/huggingface
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-export NUMBA_CACHE_DIR=/bucket/output/jfs-hdfs/user/xingchen.song/share/cache
-export MPLCONFIGDIR=/bucket/output/jfs-hdfs/user/xingchen.song/share/cache/matplotlib
-export XDG_CACHE_HOME=/bucket/output/jfs-hdfs/user/xingchen.song/share/cache/xdg
-
 # cuda related
 unset LD_LIBRARY_PATH
 prefix=/bucket/output/jfs-hdfs/user/xingchen.song/tools/cuda
@@ -36,3 +25,19 @@ export TOUCHNET_DIR=$PWD/../..
 export PATH=$PWD:$PATH
 export PYTHONIOENCODING=UTF-8
 export PYTHONPATH=../../:$PYTHONPATH
+
+# export TORCH_NCCL_BLOCKING_WAIT=1
+# export TORCH_NCCL_ASYNC_ERROR_HANDLING=1
+# export NCCL_TIMEOUT=1800000000
+# export NCCL_LAUNCH_TIMEOUT=6000000000000
+# export NCCL_SOCKET_TIMEOUT=3000000000000
+
+# torch related
+export TORCH_NCCL_AVOID_RECORD_STREAMS=1  # see https://github.com/pytorch/torchtitan/blob/main/docs/composability.md#setting-torch_nccl_avoid_record_streams1-for-tp
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export XDG_CACHE_HOME=/bucket/output/jfs-hdfs/user/xingchen.song/share/cache/xdg
+
+# huggingface related
+export HF_HOME=/bucket/output/jfs-hdfs/user/xingchen.song/share/huggingface
+export NUMBA_CACHE_DIR=/bucket/output/jfs-hdfs/user/xingchen.song/share/cache
+export MPLCONFIGDIR=/bucket/output/jfs-hdfs/user/xingchen.song/share/cache/matplotlib

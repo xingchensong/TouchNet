@@ -8,7 +8,6 @@
 # training techniques (e.g. activation checkpointing and compile) to the Llama model.
 
 import torch
-import torch.nn as nn
 from torch.distributed import DeviceMesh
 from torch.distributed.tensor import Replicate, Shard
 from torch.distributed.tensor.parallel import (ColwiseParallel,
@@ -16,16 +15,17 @@ from torch.distributed.tensor.parallel import (ColwiseParallel,
                                                RowwiseParallel,
                                                SequenceParallel,
                                                parallelize_module)
+from transformers import AutoModelForCausalLM
 
 from touchnet.bin import TrainConfig
-from touchnet.parallel_models.helper_func import (apply_ac, apply_compile,
-                                                  apply_ddp, apply_fsdp)
+from touchnet.models.helper_func import (apply_ac, apply_compile, apply_ddp,
+                                         apply_fsdp)
 from touchnet.utils.distributed import TORCH_DTYPE_MAP, ParallelDims
 from touchnet.utils.logging import logger
 
 
 def parallelize_llama(
-    model: nn.Module,
+    model: AutoModelForCausalLM,
     world_mesh: DeviceMesh,
     parallel_dims: ParallelDims,
     job_config: TrainConfig,
@@ -99,7 +99,7 @@ def parallelize_llama(
 
 
 def apply_tp(
-    model: nn.Module,
+    model: AutoModelForCausalLM,
     tp_mesh: DeviceMesh,
     loss_parallel: bool,
     enable_float8: bool,
@@ -143,8 +143,8 @@ def apply_tp(
     # NOTE: At the cost of model code change, we can accelerate Sequence Parallel
     #       by folding (and unfolding) the batch dimension and the sequence dimension.
     #       Examples can be found at https://github.com/pytorch/torchtitan/pull/437
-    model = getattr(model, f"{base_model_prefix}")
-    for layer_id, transformer_block in model.layers.items():
+    submodel = getattr(model, f"{base_model_prefix}")
+    for layer_id, transformer_block in submodel.layers.items():
         layer_plan = {
             "input_layernorm": SequenceParallel(),
             "self_attn": prepare_module_input(

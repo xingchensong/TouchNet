@@ -238,7 +238,7 @@ class IndexReader(object):
             self.bin_buffer, dtype=numpy.int32, count=self.sequence_count, offset=offset
         )
         t_end = time.time()
-        logger.info("\t> time elapsed: {t_end - t_beg:4f} seconds")
+        logger.info(f"\t> time elapsed: {t_end - t_beg:4f} seconds")
 
         logger.info("\tExtract the sequence pointers")
         t_beg = time.time()

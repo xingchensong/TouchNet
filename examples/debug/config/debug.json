@@ -1,10 +1,10 @@
 {
-  "attention_bias": false,
   "architectures": [
     "LlamaForCausalLM"
   ],
-  "bos_token_id": 1,
-  "eos_token_id": 2,
+  "attention_bias": false,
+  "bos_token_id": 128000,
+  "eos_token_id": 128009,
   "hidden_act": "silu",
   "hidden_size": 1024,
   "initializer_range": 0.02,
@@ -19,5 +19,5 @@
   "rope_scaling": null,
   "tie_word_embeddings": false,
   "use_cache": true,
-  "vocab_size": 32000
+  "vocab_size": 128256
 }
