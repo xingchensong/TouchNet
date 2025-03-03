@@ -83,6 +83,8 @@ class ParallelDims:
 
     def _validate(self):
         # TODO(xcsong): support pipeline parallelism
+        # TODO(xcsong): change ModuleList to ModuleDict in AutoModlForCausalLM to support pp
+        #       ref: https://github.com/pytorch/torchtitan/blob/main/docs/composability.md#simplifying-the-top-level-model-forward
         assert self.pp == 1, "pp should be 1 for now."
         dp_replicate, dp_shard, cp, tp, pp = (
             self.dp_replicate,
