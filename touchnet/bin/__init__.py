@@ -320,7 +320,7 @@ class TrainConfig:
         },
     )
     training_enable_loss_parallel: bool = field(
-        default=True,
+        default=False,
         metadata={
             "help": (
                 "Whether to apply loss parallel when sequence parallel is enabled"

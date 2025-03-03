@@ -154,7 +154,7 @@ def apply_fsdp(
 
     base_model_prefix = getattr(model, "base_model_prefix", "model")
     submodel = getattr(model, f"{base_model_prefix}")
-    for layer_id, transformer_block in submodel.layers.items():
+    for layer_id, transformer_block in submodel.layers.named_children():
         if reshard_after_forward_policy == "always":
             reshard_after_forward = True
         elif reshard_after_forward_policy == "never":
