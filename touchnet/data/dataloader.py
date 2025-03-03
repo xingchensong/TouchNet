@@ -12,6 +12,9 @@ from torch.distributed.checkpoint.stateful import Stateful
 from torch.utils.data import IterableDataset
 from torchdata.stateful_dataloader import StatefulDataLoader
 
+from touchnet.data import DataConfig
+from touchnet.data.datapipe import texttoken_datapipe
+from touchnet.tokenizer import TokenizerConfig
 from touchnet.utils.logging import logger
 
 
@@ -90,3 +93,20 @@ class ParallelAwareDataloader(StatefulDataLoader, BaseDataLoader):
         # We don't have to use pickle as DCP will serialize the state_dict. However, we have to
         # keep this for backward compatibility.
         super().load_state_dict(pickle.loads(state_dict[self._rank_id]))
+
+
+def build_dataloader(data_config: DataConfig, tokenizer_config: TokenizerConfig,
+                     dp_rank: int, dp_world_size: int):
+    # TODO(xcsong): support more datapipe?
+    datapipe = texttoken_datapipe(data_config, tokenizer_config,
+                                  dp_rank, dp_world_size)
+    dataloader = ParallelAwareDataloader(
+        dataset=datapipe,
+        dp_rank=dp_rank,
+        dp_world_size=dp_world_size,
+        batch_size=None,
+        num_workers=data_config.dataloader_num_workers,
+        pin_memory=True,  # TODO(xcsong): Make it configurable
+        prefetch_factor=data_config.dataloader_prefetch_factor,
+    )
+    return dataloader

@@ -110,9 +110,9 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
     world_mesh = parallel_dims.build_mesh(device_type=device_type)
     if parallel_dims.dp_enabled:
         dp_mesh = world_mesh["dp"]
-        dp_degree, dp_rank = dp_mesh.size(), dp_mesh.get_local_rank()
+        dp_world_size, dp_rank = dp_mesh.size(), dp_mesh.get_local_rank()
     else:
-        dp_degree, dp_rank = 1, 0
+        dp_world_size, dp_rank = 1, 0
 
     if parallel_dims.pp_enabled:
         pp_mesh = world_mesh["pp"]
@@ -129,7 +129,7 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
         tokenizer_config=tokenizer_config,
         data_config=data_config,
         dp_rank=dp_rank,
-        dp_world_size=dp_degree,
+        dp_world_size=dp_world_size,
     )
 
     # build model (using meta init)
@@ -137,13 +137,15 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
     config_cls = train_spec.config_cls
     model_config = config_cls.from_pretrained(job_config.training_model_config_path)
     assert model_config.vocab_size == tokenizer.vocab_size
+    assert model_config.bos_token_id == tokenizer.bos
+    assert model_config.eos_token_id == tokenizer.eos
 
     logger.info(
         f"Building {train_spec.name} with {model_config}"
     )
     with torch.device("meta"):
         model = model_cls.from_config(model_config)
-        # defer weight initialization until after parallelisms are applied
+        # NOTE: defer weight initialization until after parallelisms are applied
         model.apply(lambda m: setattr(m, "_is_hf_initialized", False))
 
     # log model size
@@ -155,7 +157,7 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
         data_config.dataset_audio_seqlen,
     )
     logger.info(
-        f"{Color.red}size: {model_param_count:,} total parameters{Color.reset}"
+        f"{Color.red}size: {model_param_count:,} total parameters ({model_param_count/1000000000.0:4f} B){Color.reset}"
     )
 
     # move sharded model to CPU/GPU and initialize weights via DTensor
@@ -272,7 +274,7 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
     logger.info(
         f"Training starts at step {train_state.step + 1}, "
         f"with local batch size {data_config.dataset_batchsize}, "
-        f"global batch size {data_config.dataset_batchsize * dp_degree}, "
+        f"global batch size {data_config.dataset_batchsize * dp_world_size}, "
         f"sequence length {data_config.dataset_audio_seqlen}, "
         f"total steps {job_config.training_steps} "
         f"(warmup {job_config.training_warmup_steps})"
@@ -289,7 +291,9 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
             # get batch
             data_load_start = time.perf_counter()
             batch = next(data_iterator)
-            inputs_embeds, labels, position_ids = batch["inputs_embeds"], batch["labels"], batch["position_ids"]
+            labels, position_ids = batch["labels"], batch["position_ids"]
+            inputs_embeds = batch["inputs_embeds"]
+            input_ids = batch["input_ids"]
             ntokens_since_last_log += labels.numel()
             data_loading_times.append(time.perf_counter() - data_load_start)
 
@@ -301,24 +305,27 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
                 For RoPE, all ranks have the same position_ids. [FOR HF model]
                 For sinusoidal, each rank has the coresponding chunked  position_ids. [FOR HF model]
 
-            e.g. for CP, [optional_context_parallel_ctx shoudl automatically distbute the position_ids]
+            e.g. for CP, [optional_context_parallel_ctx should automatically distbute the position_ids]
                 Each rank has the coresponding chunked position_ids. [FOR All model]
 
             """
-            inputs_embeds = inputs_embeds.to(device_type)
+            if inputs_embeds:
+                inputs_embeds = inputs_embeds.to(device_type)
+            else:
+                assert input_ids is not None
+                input_ids = input_ids.to(device_type)
             labels = labels.to(device_type)
             position_ids = position_ids.to(device_type)
             optimizers.zero_grad()
 
             # apply context parallelism if cp is enabled
             # ensure CP handles the separate freqs_cis buffer for each pp stage
-            # TODO(xcsong): handle position_ids here?
             optional_context_parallel_ctx = (
                 create_context_parallel_ctx(
                     cp_mesh=world_mesh["cp"],
-                    cp_buffers=[inputs_embeds, labels, position_ids],
+                    cp_buffers=[inputs_embeds if inputs_embeds else input_ids, labels, position_ids],
                     cp_seq_dims=[1, 1, 1],
-                    cp_no_restore_buffers={inputs_embeds, labels, position_ids},
+                    cp_no_restore_buffers={inputs_embeds if inputs_embeds else input_ids, labels, position_ids},
                     cp_rotate_method=job_config.training_context_parallel_rotate_method,
                 )
                 if parallel_dims.cp_enabled
@@ -326,7 +333,8 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
             )
 
             if parallel_dims.pp_enabled:
-                # TODO[xcsong], we should distribute the position_ids as well with CP, currently we just disable pp.
+                # TODO(xcsong), we should distribute the position_ids as well with CP, currently we just disable pp.
+                raise NotImplementedError()
                 # Pipeline Parallel forward / backward inside step() call
                 with train_context(optional_context_parallel_ctx):
                     targets, losses = (labels, []) if has_last_stage else (None, None)
@@ -346,6 +354,7 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
                 # Non-PP forward / backward
                 with train_context(optional_context_parallel_ctx):
                     pred = model(
+                        input_ids=input_ids,
                         inputs_embeds=inputs_embeds,
                         position_ids=position_ids,
                     )

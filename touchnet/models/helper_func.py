@@ -18,6 +18,7 @@ from torch.distributed._composable.fsdp import (CPUOffloadPolicy,
 from torch.distributed._composable.replicate import replicate
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import \
     checkpoint_wrapper as ptd_checkpoint_wrapper
+from transformers import AutoModelForCausalLM
 
 from touchnet.bin import TrainConfig
 from touchnet.utils.logging import logger
@@ -95,29 +96,33 @@ def _apply_ac_to_transformer_block(module: nn.Module, ac_config: TrainConfig):
             return module
 
 
-def apply_ac(model: nn.Module, ac_config: TrainConfig):
+def apply_ac(model: AutoModelForCausalLM, ac_config: TrainConfig):
     """Apply activation checkpointing to the model."""
-    for layer_id, transformer_block in model.layers.named_children():
+    base_model_prefix = getattr(model, "base_model_prefix", "model")
+    submodel = getattr(model, f"{base_model_prefix}")
+    for layer_id, transformer_block in submodel.layers.named_children():
         transformer_block = _apply_ac_to_transformer_block(transformer_block, ac_config)
-        model.layers.register_module(layer_id, transformer_block)
+        submodel.layers.register_module(layer_id, transformer_block)
 
     logger.info(f"Applied {ac_config.training_activation_checkpoint_mode} activation checkpointing to the model")
 
 
-def apply_compile(model: nn.Module):
+def apply_compile(model: AutoModelForCausalLM):
     """
     Apply torch.compile to each TransformerBlock, which makes compilation efficient due to
     repeated structure. Alternatively one can compile the whole model (after applying DP).
     """
-    for layer_id, transformer_block in model.layers.named_children():
+    base_model_prefix = getattr(model, "base_model_prefix", "model")
+    submodel = getattr(model, f"{base_model_prefix}")
+    for layer_id, transformer_block in submodel.layers.named_children():
         transformer_block = torch.compile(transformer_block, fullgraph=True)
-        model.layers.register_module(layer_id, transformer_block)
+        submodel.layers.register_module(layer_id, transformer_block)
 
     logger.info("Compiling each TransformerBlock with torch.compile")
 
 
 def apply_fsdp(
-    model: nn.Module,
+    model: AutoModelForCausalLM,
     dp_mesh: DeviceMesh,
     param_dtype: torch.dtype,
     reduce_dtype: torch.dtype,
@@ -147,7 +152,9 @@ def apply_fsdp(
     if cpu_offload:
         fsdp_config["offload_policy"] = CPUOffloadPolicy()
 
-    for layer_id, transformer_block in model.layers.items():
+    base_model_prefix = getattr(model, "base_model_prefix", "model")
+    submodel = getattr(model, f"{base_model_prefix}")
+    for layer_id, transformer_block in submodel.layers.items():
         if reshard_after_forward_policy == "always":
             reshard_after_forward = True
         elif reshard_after_forward_policy == "never":
@@ -160,7 +167,7 @@ def apply_fsdp(
             else:
                 # As an optimization, do not reshard after forward for the last
                 # transformer block since FSDP would prefetch it immediately
-                reshard_after_forward = int(layer_id) < len(model.layers) - 1
+                reshard_after_forward = int(layer_id) < len(submodel.layers) - 1
         else:
             raise ValueError(
                 f"Invalid reshard_after_forward_policy: {reshard_after_forward_policy}."
@@ -170,11 +177,13 @@ def apply_fsdp(
             **fsdp_config,
             reshard_after_forward=reshard_after_forward,
         )
+    # FIXME(xcsong): model or submodel?
+    fully_shard(submodel, **fsdp_config, reshard_after_forward=not pp_enabled)
     fully_shard(model, **fsdp_config, reshard_after_forward=not pp_enabled)
 
 
 def apply_ddp(
-    model: nn.Module,
+    model: AutoModelForCausalLM,
     dp_mesh: DeviceMesh,
     enable_compile: bool,
     enable_compiled_autograd: bool,

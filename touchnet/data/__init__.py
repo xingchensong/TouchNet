@@ -1,11 +1,6 @@
 from dataclasses import asdict, dataclass, field, fields
 from typing import Any, Dict, List, Optional, Union
 
-from touchnet.tokenizer import TokenizerConfig
-
-from .dataloader import ParallelAwareDataloader
-from .datapipe import audio_and_metainfo_datapipe
-
 
 @dataclass
 class DataConfig:
@@ -368,21 +363,19 @@ class DataConfig:
             )
         },
     )
-
-
-def build_dataloader(data_config: DataConfig, tokenizer_config: TokenizerConfig,
-                     dp_rank: int, dp_world_size: int,
-                     num_workers: int, prefetch_factor: int):
-    # TODO(xcsong): support more datapipe?
-    datapipe = audio_and_metainfo_datapipe(data_config, tokenizer_config,
-                                           dp_rank, dp_world_size)
-    dataloader = ParallelAwareDataloader(
-        dataset=datapipe,
-        dp_rank=dp_rank,
-        dp_world_size=dp_world_size,
-        batch_size=None,
-        num_workers=num_workers,
-        pin_memory=True,
-        prefetch_factor=prefetch_factor,
+    dataloader_num_workers: int = field(
+        default=6,
+        metadata={
+            "help": (
+                "num_workers for dataloader."
+            )
+        },
     )
-    return dataloader
+    dataloader_prefetch_factor: int = field(
+        default=6,
+        metadata={
+            "help": (
+                "prefetch fector for dataloader."
+            )
+        },
+    )

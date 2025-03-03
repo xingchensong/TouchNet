@@ -8,7 +8,8 @@ from torch.utils.data import IterableDataset
 
 from touchnet.data import DataConfig, processor
 from touchnet.data.dataset import TouchDataset
-from touchnet.tokenizer import TokenizerConfig, build_tokenizer
+from touchnet.tokenizer import TokenizerConfig
+from touchnet.tokenizer.tokenizer import build_tokenizer
 
 
 # TODO(xcsong): is_build_on_rank
@@ -215,15 +216,25 @@ def audio_and_metainfo_datapipe(
         datapipe = Processor(datapipe, processor.audiofeat_spec_trim, data_config)
 
     datapipe = Processor(datapipe, processor.audiofeat_stack, data_config)
-    datapipe = Processor(datapipe, processor.batch_pairaudio_pairtext, data_config)
+    datapipe = Processor(datapipe, processor.batch_pairaudio_pairtext, data_config,
+                         tokenizer)
     return datapipe
 
 
 def audio_datapipe():
     pass
 
-def texttoken_datapipe():
-    pass
+def texttoken_datapipe(
+    data_config: DataConfig,
+    tokenizer_config: TokenizerConfig,
+    dp_rank: int, dp_world_size: int,
+):
+    datapipe = TouchDatapipe(data_config, dp_rank, dp_world_size)
+    tokenizer = build_tokenizer(tokenizer_config)
+
+    datapipe = Processor(datapipe, processor.filter, data_config)
+    datapipe = Processor(datapipe, processor.batch_text, data_config, tokenizer)
+    return datapipe
 
 def audiotoken_datapipe():
     pass

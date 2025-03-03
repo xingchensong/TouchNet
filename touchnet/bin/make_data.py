@@ -10,7 +10,8 @@ from transformers.hf_argparser import HfArgumentParser
 
 from touchnet.bin import MakeDataConfig
 from touchnet.data.dataset import DType, IndexWriter
-from touchnet.tokenizer import TokenizerConfig, build_tokenizer
+from touchnet.tokenizer import TokenizerConfig
+from touchnet.tokenizer.tokenizer import build_tokenizer
 from touchnet.utils.logging import init_logger, logger
 
 
@@ -155,6 +156,7 @@ def build_texttoken(
     *args,
     **kwargs,
 ):
+    assert tok_conf.tokenizer_model is not None, "tok_conf.tokenizer_model cannot be None"
     tokenizer = build_tokenizer(tok_conf)
     builders = {
         "texttoken": DataBuilder(f"{path_prefix}/texttoken.bin",
@@ -165,8 +167,10 @@ def build_texttoken(
     for sample in chunk:
         try:
             data = json.loads(sample.strip())
+            if len(data["text"]) == 0:
+                continue
             # TODO(xcsong): split sentence ?
-            texttoken = tokenizer.tokenize(data["text"])
+            texttoken = tokenizer.tokenize(data["text"], add_special_tokens=False)
         except Exception as ex:
             logger.warning(f"Catch exception in reading {sample}: {ex}")
             continue
@@ -227,13 +231,18 @@ def build_audio_and_metainfo(
     builders["metainfo"].finalize(f"{path_prefix}/metainfo.idx")
 
 
+def handle_error(e):
+    logger.error(f"Catch error in subprocess: {e}")
+
+
 if __name__ == "__main__":
     torch.set_num_threads(1)
+    os.environ["PYTHONUNBUFFERED"] = "1"
     parser = HfArgumentParser([MakeDataConfig, TokenizerConfig])
     (conf, tok_conf) = parser.parse_args_into_dataclasses()
     init_logger()
 
-    assert conf.jsonl_path is not None
+    assert conf.jsonl_path is not None, "conf.jsonl_path cannot be None"
     samples = []
     with open(conf.jsonl_path, "r") as f:
         for line in f:
@@ -256,7 +265,8 @@ if __name__ == "__main__":
         path_prefix = "{}/{:09d}".format(conf.save_dir, i)
         os.makedirs(path_prefix, exist_ok=True)
         shards_list.append(path_prefix)
-        pool.apply_async(processor, (chunk, path_prefix, i, num_chunks, conf, tok_conf))
+        pool.apply_async(processor, (chunk, path_prefix, i, num_chunks, conf, tok_conf),
+                         error_callback=handle_error)
 
     pool.close()
     pool.join()
