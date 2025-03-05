@@ -33,7 +33,7 @@ num_nodes=1
 
 job_id=2026
 
-train_set=wikitext-2-v1.train
+train_set=wikitext-2-v1.train.repeat10000
 dev_set=wikitext-2-v1.validation
 test_sets=wikitext-2-v1.test
 
@@ -82,8 +82,11 @@ fi
 if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
   echo "$0: starting training"
   echo "$0: num_nodes is $num_nodes, proc_per_node is $num_gpus"
+  # export TORCH_LOGS="+dynamo"
+  # export TORCHDYNAMO_VERBOSE=1
   torchrun --nnodes=$num_nodes --nproc_per_node=$num_gpus \
            --rdzv_id=$job_id --rdzv_backend="c10d" --rdzv_endpoint=$HOST_NODE_ADDR \
+           --local-ranks-filter "0" \
     touchnet/bin/train.py \
       --tokenizer_model "/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct" \
       --tokenizer_type "HuggingFaceTokenizer" \
@@ -92,20 +95,24 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --datalist_shuffling true \
       --dataset_shuffling true \
       --dataset_mmap true \
-      --dataset_batchsize 8 \
-      --dataset_text_seqlen 2048 \
-      --text_max_length_in_tokens_for_filter 2048 \
+      --dataset_batchsize 1 \
+      --dataset_text_seqlen 8192 \
+      --text_max_length_in_tokens_for_filter 8192 \
       --text_min_length_in_tokens_for_filter 1 \
-      --dataloader_num_workers 2 \
+      --dataloader_num_workers 6 \
       --dataloader_prefetch_factor 6 \
       --training_description "debug only" \
       --training_model_name "llama" \
       --training_model_config_path "config/debug.json" \
       --training_print_args true \
-      --training_trace_dump_folder "exp/debug" \
+      --training_trace_dump_folder "exp/debug5_1B_1x8k_fullac" \
+      --training_fsdp_reshard_after_forward "default" \
+      --training_tensor_parallel_degree 1 \
+      --training_enable_loss_parallel false \
       --training_enable_ckpt true \
-      --training_ckpt_load_step 0 \
-      --training_log_freq 100 \
+      --training_ckpt_load_step -1 \
+      --training_ckpt_interval 100 \
+      --training_log_freq 1 \
       --training_enable_tensorboard true \
       --training_save_tb_folder "tensorboard" \
       --training_tb_rank_0_only true \
@@ -113,17 +120,17 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --training_mixed_precision_reduce "float32" \
       --training_compile true \
       --training_enable_compiled_autograd false \
-      --training_gc_freq 50 \
+      --training_gc_freq 500 \
       --training_seed 2025 \
       --training_deterministic false \
       --training_steps 10000 \
       --training_warmup_steps 200 \
       --training_max_norm 1.0 \
-      --training_activation_checkpoint_mode "selective" \
+      --training_activation_checkpoint_mode "full" \
       --training_activation_checkpoint_selective_ac_option "2" \
-      --training_enable_profiling true \
+      --training_enable_profiling false \
       --training_profiling_traces_folder "profile_traces" \
-      --training_profiling_freq 10 \
+      --training_profiling_freq 100 \
       --training_profiling_enable_memory_snapshot true \
       --training_profiling_save_memory_snapshot_folder "memory_snapshot" \
       --training_optimizer_name "AdamW" \

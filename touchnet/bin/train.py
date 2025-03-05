@@ -77,6 +77,8 @@ class TrainState(Stateful):
 # Enable debug tracing on failure: https://pytorch.org/docs/stable/elastic/errors.html
 @record
 def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config: TrainConfig):
+    torch._dynamo.config.cache_size_limit = 1024
+    # torch.set_float32_matmul_precision('high')
     logger.info(f"Starting job: {job_config.training_description}")
 
     if job_config.training_print_args:
@@ -149,15 +151,20 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
         model.apply(lambda m: setattr(m, "_is_hf_initialized", False))
 
     # log model size
-    model_param_count = get_num_params(model)
+    model_param_count = get_num_params(model, exclude_embedding=False)
+    model_param_count_wo_emb = get_num_params(model, exclude_embedding=True)
     # TODO(xcsong): support encoder-decoder flops
     num_flop_per_token = get_num_flop_per_token(
-        get_num_params(model, exclude_embedding=True),
+        model_param_count_wo_emb,
         model_config,
-        data_config.dataset_audio_seqlen,
+        data_config.dataset_text_seqlen,
     )
     logger.info(
         f"{Color.red}size: {model_param_count:,} total parameters ({model_param_count/1000000000.0:4f} B){Color.reset}"
+    )
+    logger.info(
+        f"{Color.red}size (wo emb): {model_param_count_wo_emb:,}" +
+        f" total parameters (wo emb) ({model_param_count_wo_emb/1000000000.0:4f} B){Color.reset}"
     )
 
     # move sharded model to CPU/GPU and initialize weights via DTensor
@@ -275,7 +282,7 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
         f"Training starts at step {train_state.step + 1}, "
         f"with local batch size {data_config.dataset_batchsize}, "
         f"global batch size {data_config.dataset_batchsize * dp_world_size}, "
-        f"sequence length {data_config.dataset_audio_seqlen}, "
+        f"sequence length {data_config.dataset_text_seqlen}, "
         f"total steps {job_config.training_steps} "
         f"(warmup {job_config.training_warmup_steps})"
     )
@@ -358,8 +365,8 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
                         inputs_embeds=inputs_embeds,
                         position_ids=position_ids,
                     )
-                    loss = train_spec.loss_fn(pred, labels)
-                    # pred.shape=(bs, seq_len, vocab_size)
+                    # pred.logits.shape=(bs, seq_len, vocab_size)
+                    loss = train_spec.loss_fn(pred.logits, labels)
                     # need to free to before bwd to avoid peaking memory
                     del pred
                     loss.backward()
