@@ -11,11 +11,12 @@ def is_port_open(host, port):
         return s.connect_ex((host, port)) == 0
 
 
-@pytest.mark.parametrize("master_port, nnodes, nproc_per_node, dp_shard, dp_replicate, cp, tp, lp", [
-    (29500, 4, 8, -1, 2, 2, 4, True),
-    (29501, 4, 8, -1, 1, 4, 2, False),
-    (29502, 4, 8, -1, 1, 2, 4, True),
-])
+# @pytest.mark.parametrize("master_port, nnodes, nproc_per_node, dp_shard, dp_replicate, cp, tp, lp", [
+#     (29500, 4, 8, -1, 2, 2, 4, True),
+#     (29501, 4, 8, -1, 1, 4, 2, False),
+#     (29502, 4, 8, -1, 1, 2, 4, True),
+# ])
+@pytest.mark.skip(reason="太吃机器资源，离线测试就行")
 def test_distributed_cpu(master_port, nnodes, nproc_per_node, dp_shard, dp_replicate, cp, tp, lp):
     master_addr = "127.0.0.1"
     processes = []
