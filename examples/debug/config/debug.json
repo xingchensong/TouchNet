@@ -30,5 +30,6 @@
   "tie_word_embeddings": true,
   "torch_dtype": "bfloat16",
   "use_cache": false,
+  "attn_implementation": "sdpa",
   "vocab_size": 128256
 }
