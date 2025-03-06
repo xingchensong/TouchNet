@@ -96,8 +96,8 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --dataset_shuffling true \
       --dataset_mmap true \
       --dataset_batchsize 1 \
-      --dataset_text_seqlen 8192 \
-      --text_max_length_in_tokens_for_filter 8192 \
+      --dataset_text_seqlen 65536 \
+      --text_max_length_in_tokens_for_filter 65536 \
       --text_min_length_in_tokens_for_filter 1 \
       --dataloader_num_workers 6 \
       --dataloader_prefetch_factor 6 \
@@ -105,10 +105,12 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --training_model_name "llama" \
       --training_model_config_path "config/debug.json" \
       --training_print_args true \
-      --training_trace_dump_folder "exp/debug5_1B_1x8k_fullac" \
+      --training_trace_dump_folder "exp/debug5_1B_1x64k_fullac_cp4tp2splp_sdpa" \
       --training_fsdp_reshard_after_forward "default" \
-      --training_tensor_parallel_degree 1 \
-      --training_enable_loss_parallel false \
+      --training_context_parallel_degree 4 \
+      --training_context_parallel_rotate_method "allgather" \
+      --training_tensor_parallel_degree 2 \
+      --training_enable_loss_parallel true \
       --training_enable_ckpt true \
       --training_ckpt_load_step -1 \
       --training_ckpt_interval 100 \
