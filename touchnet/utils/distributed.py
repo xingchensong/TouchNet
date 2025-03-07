@@ -82,10 +82,6 @@ class ParallelDims:
         self._validate()
 
     def _validate(self):
-        # TODO(xcsong): support pipeline parallelism
-        # TODO(xcsong): change ModuleList to ModuleDict in AutoModlForCausalLM to support pp
-        #       ref: https://github.com/pytorch/torchtitan/blob/main/docs/composability.md#simplifying-the-top-level-model-forward
-        assert self.pp == 1, "pp should be 1 for now."
         dp_replicate, dp_shard, cp, tp, pp = (
             self.dp_replicate,
             self.dp_shard,
@@ -562,13 +558,12 @@ def build_pipeline_schedule(
             f"of stages ({num_total_stages}) which may result in a bubble in the pipeline."
         )
 
-    # TODO(xcsong): move `job_config.training.batch_size % n_microbatches != 0` to train.py
     # validate that the batch size is divisible by the number of microbatches otherwise we'll hang or error during training
-    # if job_config.training.batch_size % n_microbatches != 0:
-    #     raise ValueError(
-    #         f"Batch size {job_config.training.batch_size} must be divisible by number of microbatches {n_microbatches}. "
-    #         "Update the config arguments for either batch_size or pipeline_parallel_microbatches."
-    #     )
+    if job_config.training_batchsize % n_microbatches != 0:
+        raise ValueError(
+            f"Batch size {job_config.training.batch_size} must be divisible by number of microbatches {n_microbatches}. "
+            "Update the config arguments for either dataset_batchsize or training_pipeline_parallel_microbatches."
+        )
 
     schedule = schedule_class(
         stages if looped_schedule else stages[0],
@@ -598,7 +593,33 @@ def build_pipeline_schedule(
 def stage_ids_this_rank(
     pp_rank: int, pp_size: int, num_stages: int, style: str = "loop"
 ) -> tuple[int]:
-    """Compute the stage ids for the stages that will run on this pp rank for either a looped or V style schedule"""
+    """
+        Compute the stage ids for the stages that will run on this pp rank for either a looped or V style schedule.
+
+        NOTE(xcsong):
+
+        Assume we have pp_size=4 & num_stages=8 & schedule=ScheduleZBVZeroBubble(MultiStage) & num_layers=16
+        Then we got loop style:
+            pp_rank0 runs: stage0(layer0 + layer1) + stage4(layer8 + layer9)
+            pp_rank1 runs: stage1(layer2 + layer3) + stage5(layer10 + layer11)
+            pp_rank2 runs: stage2(layer4 + layer5) + stage6(layer12 + layer13)
+            pp_rank3 runs: stage3(layer6 + layer7) + stage7(layer14 + layer15)
+            Training batch pass through rank0~3 twice, this is so called `loop` style.
+        and v style:
+            pp_rank0 runs: stage0(layer0 + layer1) + stage7(layer14 + layer15)
+            pp_rank1 runs: stage1(layer2 + layer3) + stage6(layer12 + layer13)
+            pp_rank2 runs: stage2(layer4 + layer5) + stage5(layer10 + layer11)
+            pp_rank3 runs: stage3(layer6 + layer7) + stage4(layer8 + layer9)
+            Training batch pass through rank0~3 and rank3~0, vice versa.
+
+        For pp_size=4 & num_stages=4 & schedule=Schedule1F1B(SingleStage) & num_layers=16
+        We only have:
+            pp_rank0 runs: stage0(layer0 + layer1 + layer2 + layer3)
+            pp_rank1 runs: stage1(layer4 + layer5 + layer6 + layer7)
+            pp_rank2 runs: stage2(layer8 + layer9 + layer10 + layer11)
+            pp_rank3 runs: stage3(layer12 + layer13 + layer14 + layer15)
+            Training batch pass through rank0~3 only once.
+    """
     assert (
         num_stages % pp_size == 0
     ), f"num_stages {num_stages} must be evenly divisible by pp_size {pp_size}"

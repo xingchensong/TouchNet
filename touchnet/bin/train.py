@@ -138,6 +138,7 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
     model_cls = train_spec.model_cls
     config_cls = train_spec.config_cls
     model_config = config_cls.from_pretrained(job_config.training_model_config_path)
+    model_config.return_dict = False  # NOTE: for compatibility with pipeline parallel
     assert model_config.vocab_size == tokenizer.vocab_size
     assert model_config.bos_token_id == tokenizer.bos
     assert model_config.eos_token_id == tokenizer.eos
@@ -178,6 +179,7 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
     # apply parallelisms and initialization
     if parallel_dims.pp_enabled:
         # apply PT-D Pipeline Parallel
+        job_config.training_batchsize = data_config.dataset_batchsize
         (
             pp_schedule,
             model_parts,
@@ -204,6 +206,7 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
             m.to_empty(device=init_device)
             with torch.no_grad():
                 m.post_init()
+                # TODO(xcsong): load weight from hf? currently only support random init
             m.train()
     else:
         # apply PT-D Tensor Parallel, activation checkpointing, torch.compile, Data Parallel
@@ -211,6 +214,7 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
         model.to_empty(device=init_device)
         with torch.no_grad():
             model.post_init()
+            # TODO(xcsong): load weight from hf? currently only support random init
         model.train()
 
         model_parts = [model]
@@ -316,13 +320,19 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
                 Each rank has the coresponding chunked position_ids. [FOR All model]
 
             """
-            if inputs_embeds:
-                inputs_embeds = inputs_embeds.to(device_type)
-            else:
-                assert input_ids is not None
-                input_ids = input_ids.to(device_type)
             labels = labels.to(device_type)
             position_ids = position_ids.to(device_type)
+            cp_buffers, cp_no_restore_buffers, cp_seq_dims = [labels, position_ids], [labels, position_ids], [1, 1]
+            if inputs_embeds is not None:
+                inputs_embeds = inputs_embeds.to(device_type)
+                cp_buffers.append(inputs_embeds)
+                cp_no_restore_buffers.append(inputs_embeds)
+                cp_seq_dims.append(1)
+            if input_ids is not None:
+                input_ids = input_ids.to(device_type)
+                cp_buffers.append(input_ids)
+                cp_no_restore_buffers.append(input_ids)
+                cp_seq_dims.append(1)
             optimizers.zero_grad()
 
             # apply context parallelism if cp is enabled
@@ -330,9 +340,9 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
             optional_context_parallel_ctx = (
                 create_context_parallel_ctx(
                     cp_mesh=world_mesh["cp"],
-                    cp_buffers=[inputs_embeds if inputs_embeds else input_ids, labels, position_ids],
-                    cp_seq_dims=[1, 1, 1],
-                    cp_no_restore_buffers={inputs_embeds if inputs_embeds else input_ids, labels, position_ids},
+                    cp_buffers=cp_buffers,
+                    cp_seq_dims=cp_seq_dims,
+                    cp_no_restore_buffers=set(cp_no_restore_buffers),
                     cp_rotate_method=job_config.training_context_parallel_rotate_method,
                 )
                 if parallel_dims.cp_enabled
@@ -340,15 +350,25 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
             )
 
             if parallel_dims.pp_enabled:
-                # TODO(xcsong), we should distribute the position_ids as well with CP, currently we just disable pp.
-                raise NotImplementedError()
+                # TODO(xcsong): we should distribute the position_ids as well with CP,
+                #   currently we just disable CP if PP is enabled.
+                assert not parallel_dims.cp_enabled, "CP is not supported with PP"
                 # Pipeline Parallel forward / backward inside step() call
                 with train_context(optional_context_parallel_ctx):
                     targets, losses = (labels, []) if has_last_stage else (None, None)
                     if has_first_stage:
-                        pp_schedule.step(inputs_embeds, target=targets, losses=losses)
+                        pp_schedule.step(
+                            input_ids,
+                            position_ids=position_ids,
+                            target=targets,
+                            losses=losses
+                        )
                     else:
-                        pp_schedule.step(target=targets, losses=losses)
+                        pp_schedule.step(
+                            position_ids=position_ids,
+                            target=targets,
+                            losses=losses
+                        )
 
                 # accumulate losses across pipeline microbatches
                 # TODO: PP+FSDP unexpectedly puts the loss back to the CPU
@@ -366,7 +386,7 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
                         position_ids=position_ids,
                     )
                     # pred.logits.shape=(bs, seq_len, vocab_size)
-                    loss = train_spec.loss_fn(pred.logits, labels)
+                    loss = train_spec.loss_fn(pred, labels)
                     # need to free to before bwd to avoid peaking memory
                     del pred
                     loss.backward()
