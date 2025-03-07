@@ -346,7 +346,7 @@ class TrainConfig:
         },
     )
     training_pipeline_parallel_split_points: str = field(
-        default="",
+        default=None,
         metadata={
             "help": (
                 "Specify comma-separated names of modules to use as the beginning of a split point. "

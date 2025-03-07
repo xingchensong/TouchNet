@@ -12,7 +12,7 @@ from touchnet.utils.train_spec import TrainSpec, register_train_spec
 def cross_entropy_loss(pred: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
     """Common cross-entropy loss function for Transformer models training."""
     return torch.nn.functional.cross_entropy(
-        pred.flatten(0, 1).float(), labels.flatten(0, 1)
+        pred[0].flatten(0, 1).float(), labels.flatten(0, 1)
     )
 
 

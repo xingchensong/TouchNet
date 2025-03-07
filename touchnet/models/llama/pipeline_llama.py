@@ -27,6 +27,169 @@ from touchnet.utils.logging import logger
 DeviceType = Union[int, str, torch.device]
 
 
+def patch_llama_forward(model: nn.Module):
+    """
+    patch forward method for LlamaModel instance.
+    Revised from transformers.models.llama.modeling_llama.LlamaModel.forward
+    """
+
+    def forward(
+        self,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values=None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **flash_attn_kwargs,
+    ) -> torch.Tensor:
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError(
+                "You must specify exactly one of input_ids or inputs_embeds"
+            )
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        if cache_position is None:
+            past_seen_tokens = (
+                past_key_values.get_seq_length() if past_key_values is not None else 0
+            )
+            cache_position = torch.arange(
+                past_seen_tokens,
+                past_seen_tokens + inputs_embeds.shape[1],
+                device=inputs_embeds.device,
+            )
+
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
+        causal_mask = self._update_causal_mask(
+            attention_mask, inputs_embeds, cache_position, past_key_values, False
+        )
+
+        hidden_states = inputs_embeds
+        # create position embeddings to be shared across the decoder layers
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        # decoder layers, ok since ModuleDict is ordered
+        for decoder_layer in list(self.layers.values())[
+            : self.config.num_hidden_layers
+        ]:
+
+            layer_outputs = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_values,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                **flash_attn_kwargs,
+            )
+            hidden_states = layer_outputs[0]
+
+        # NOTE: adapt for last stage / other stage
+        if self.norm is not None:
+            hidden_states = self.norm(hidden_states)
+
+        return hidden_states
+
+    # bind to model instance
+    model.forward = forward.__get__(model, model.__class__)
+
+
+def patch_llamaforcasuallm_forward(model: nn.Module):
+    """
+    patch forward method for LlamaForCausalLM instance
+    """
+
+    def forward(
+        self,
+        input_ids_or_input_embeds: torch.Tensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values=None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs,
+    ) -> torch.Tensor:
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
+        if return_dict is True:
+            raise ValueError(
+                "return_dict must be False while using pipeline parallelism"
+            )
+
+        # NOTE: adapt for first staget / other stage
+        if input_ids_or_input_embeds.dtype == torch.int64:
+            input_ids = input_ids_or_input_embeds
+            inputs_embeds = None
+        else:
+            input_ids = None
+            inputs_embeds = input_ids_or_input_embeds
+
+        hidden_states = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            cache_position=cache_position,
+            **kwargs,
+        )
+
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = (
+            slice(-logits_to_keep, None)
+            if isinstance(logits_to_keep, int)
+            else logits_to_keep
+        )
+
+        # NOTE: adapt for last stage / other stage
+        if self.lm_head is not None:
+            logits = self.lm_head(hidden_states[:, slice_indices, :])
+            return (logits,)
+        else:
+            return (hidden_states[:, slice_indices, :],)
+
+    # bind to model instance
+    model.forward = forward.__get__(model, model.__class__)
+
+    # patch for LlamaModel instance
+    patch_llama_forward(model.model)
+
+
 def pipeline_llama(
     model: nn.Module,
     pp_mesh: DeviceMesh,
@@ -36,6 +199,16 @@ def pipeline_llama(
     model_config: PretrainedConfig,
     loss_fn: Callable[..., torch.Tensor],
 ) -> tuple[_PipelineSchedule, list[nn.Module], bool, bool]:
+    # NOTE(xcsong): Why do we have to change model.model.layers to nn.ModuleDict?
+    #   https://github.com/pytorch/torchtitan/blob/main/docs/composability.md#simplifying-the-top-level-model-forward
+    logger.info("Changing model.model.layers to nn.ModuleDict")
+    model.model.layers = nn.ModuleDict(
+        {str(i): layer for i, layer in enumerate(model.model.layers)}
+    )
+    logger.info(
+        "Patching Llama forward method for pipeline parallelism, it will disable some features of orignal HF model"
+    )
+    patch_llamaforcasuallm_forward(model)
     stages, models = pipeline_llama_manual_split(
         model, pp_mesh, parallel_dims, job_config, device, model_config
     )
@@ -75,7 +248,7 @@ def pipeline_llama_manual_split(
 
     splits = (
         job_config.training_pipeline_parallel_split_points
-        or generate_split_points(job_config, parallel_dims.pp, model_config.n_layers)
+        or generate_split_points(job_config, parallel_dims.pp, model_config.num_hidden_layers)
     )
 
     def _build_stage(
@@ -86,22 +259,28 @@ def pipeline_llama_manual_split(
         is_last: bool = False,
     ) -> tuple[PipelineStage, nn.Module]:
         model = copy.deepcopy(whole_model)
-        if not is_first:
-            model.tok_embeddings = None
+
+        if not is_first and not is_last:
+            model.model.embed_tokens = None
+            model.lm_head = None
+            model.model.norm = None
+        elif is_first:
+            model.model.norm = None
+            if not model_config.tie_word_embeddings:
+                model.lm_head = None
+        elif is_last:
+            if not model_config.tie_word_embeddings:
+                model.model.embed_tokens = None
 
         drop_layers = start_layer is not None
-        for name in list(model.layers.keys()):
+        for name in list(model.model.layers.keys()):
             # we keep layers in a contiguous region between start (inclusive) and stop (exclusive)
             if f"layers.{name}" == start_layer:
                 drop_layers = False
             if f"layers.{name}" == stop_layer:
                 drop_layers = True
             if drop_layers:
-                del model.layers[name]
-
-        if not is_last:
-            model.norm = None
-            model.output = None
+                del model.model.layers[name]
 
         stage = PipelineStage(
             model,
@@ -139,4 +318,6 @@ def pipeline_llama_manual_split(
         )
         stages.append(stage)
         models.append(model_chunk)
+    # NOTE(xcsong): len(stages) == 1 for PipelineScheduleSingle
+    #               len(stages) == 2 for PipelineScheduleMulti
     return stages, models
