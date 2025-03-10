@@ -30,6 +30,7 @@ from touchnet.utils.distributed import (GarbageCollection, ParallelDims,
 from touchnet.utils.logging import Color, init_logger, logger
 from touchnet.utils.metrics import (build_device_memory_monitor,
                                     build_metric_logger,
+                                    ensure_pp_loss_visible,
                                     get_num_flop_per_token, get_num_params,
                                     get_peak_flops)
 from touchnet.utils.profiling import (maybe_enable_memory_snapshot,
@@ -208,6 +209,10 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
                 m.post_init()
                 # TODO(xcsong): load weight from hf? currently only support random init
             m.train()
+
+        # confirm that user will be able to view loss metrics on the console
+        ensure_pp_loss_visible(parallel_dims, job_config, Color)
+
     else:
         # apply PT-D Tensor Parallel, activation checkpointing, torch.compile, Data Parallel
         train_spec.parallelize_fn(model, world_mesh, parallel_dims, job_config)
