@@ -105,11 +105,11 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --training_model_name "llama" \
       --training_model_config_path "config/debug.json" \
       --training_print_args true \
-      --training_trace_dump_folder "exp/debug5_1B_1x64k_fullac_tp8splp_sdpa_rerun" \
+      --training_trace_dump_folder "exp/debug5_1B_1x64k_fullac_cp4tp2splp_sdpa_rerun" \
       --training_fsdp_reshard_after_forward "default" \
-      --training_context_parallel_degree 1 \
+      --training_context_parallel_degree 4 \
       --training_context_parallel_rotate_method "allgather" \
-      --training_tensor_parallel_degree 8 \
+      --training_tensor_parallel_degree 2 \
       --training_enable_loss_parallel true\
       --training_pipeline_parallel_degree 1 \
       --training_pipeline_parallel_schedule "1F1B" \
