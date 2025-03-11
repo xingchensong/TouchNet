@@ -284,7 +284,7 @@ class CheckpointManager:
 
         This function will save the checkpoint for the current step. If ``force`` is
         true, it will save the checkpoint even if the interval has not been reached.
-        This only happens when train_state.step == job_config.training_steps, or
+        This only happens when train_state.step == job_config.lr_scheduler_steps, or
         for initial seed checkpoint.
 
         Args:

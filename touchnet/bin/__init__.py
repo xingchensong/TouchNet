@@ -223,18 +223,6 @@ class TrainConfig:
             "help": ("Use deterministic algorithms wherever possible, may be slower."),
         },
     )
-    training_steps: int = field(
-        default=10000,
-        metadata={
-            "help": ("How many train steps to run"),
-        },
-    )
-    training_warmup_steps: int = field(
-        default=200,
-        metadata={
-            "help": ("Steps for lr scheduler warmup, normally 1/5 of --training_steps"),
-        },
-    )
     training_max_norm: float = field(
         default=1.0,
         metadata={
@@ -559,7 +547,7 @@ class TrainConfig:
         },
     )
     # optimizer & lr configs
-    training_optimizer_name: str = field(
+    optimizer_name: str = field(
         default="AdamW",
         metadata={
             "help": (
@@ -567,7 +555,7 @@ class TrainConfig:
             ),
         },
     )
-    training_optimizer_lr: float = field(
+    optimizer_lr: float = field(
         default=8e-4,
         metadata={
             "help": (
@@ -575,7 +563,7 @@ class TrainConfig:
             ),
         },
     )
-    training_optimizer_impl: str = field(
+    optimizer_impl: str = field(
         default="fused",
         metadata={
             "help": (
@@ -586,5 +574,51 @@ class TrainConfig:
                 "- more info: https://pytorch.org/docs/stable/optim.html"
             ),
             "choices": ["for-loop", "foreach", "fused"],
+        },
+    )
+    lr_scheduler_steps: int = field(
+        default=10000,
+        metadata={
+            "help": ("How many train steps to run"),
+        },
+    )
+    lr_scheduler_warmup_steps: int = field(
+        default=200,
+        metadata={
+            "help": ("Steps for lr scheduler warmup, normally 1/5 of --lr_scheduler_steps"),
+        },
+    )
+    lr_scheduler_decay_ratio: float = field(
+        default=None,
+        metadata={
+            "help": (
+                "Controls the proportion of the training steps allocated to the learning rate decay phase. "
+                "If `None`, the learning rate will begin decaying immediately after the warmup period. "
+                "Otherwise, the learning rate will remain stable after the warmup period and "
+                "only start decaying during the last `decay_ratio` portion of the total training steps. "
+                "This is known as the Warmup-Stable-Decay (WSD) schedule, as described in https://arxiv.org/abs/2404.06395."
+            ),
+        },
+    )
+    lr_scheduler_decay_type: str = field(
+        default="linear",
+        metadata={
+            "help": (
+                "Learning rate decay type to use during training: "
+                "- 'linear': linearly decays learning rate from initial to final value "
+                "- 'sqrt': decays learning rate following a 1 minus square root curve "
+                "- 'cosine': smoothly decays learning rate following a cosine curve"
+            ),
+            "choices": ["linear", "sqrt", "cosine"],
+        },
+    )
+    lr_scheduler_lr_min: float = field(
+        default=0.0,
+        metadata={
+            "help": (
+                "Min lr ratio for lr scheduler. "
+                "If provided, the range of decay factor is scaled from 1 to `lr_min` "
+                "to ensure the learning rate does not drop below `optimizer.lr * lr_scheduler.lr_min`."
+            ),
         },
     )

@@ -275,15 +275,15 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
         f"with local batch size {data_config.dataset_batchsize}, "
         f"global batch size {data_config.dataset_batchsize * dp_world_size}, "
         f"sequence length {data_config.dataset_text_seqlen}, "
-        f"total steps {job_config.training_steps} "
-        f"(warmup {job_config.training_warmup_steps})"
+        f"total steps {job_config.lr_scheduler_steps} "
+        f"(warmup {job_config.lr_scheduler_warmup_steps})"
     )
     with maybe_enable_profiling(
         job_config, global_step=train_state.step
     ) as torch_profiler, maybe_enable_memory_snapshot(
         job_config, global_step=train_state.step
     ) as memory_profiler:
-        while train_state.step < job_config.training_steps:
+        while train_state.step < job_config.lr_scheduler_steps:
             train_state.step += 1
             gc_handler.run(train_state.step)
 
@@ -416,7 +416,7 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
                 )
 
             checkpoint.save(
-                train_state.step, force=(train_state.step == job_config.training_steps)
+                train_state.step, force=(train_state.step == job_config.lr_scheduler_steps)
             )
 
             # signal the profiler that the next profiling step has started

@@ -105,7 +105,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --training_model_name "llama" \
       --training_model_config_path "config/debug.json" \
       --training_print_args true \
-      --training_trace_dump_folder "exp/debug5_1B_1x4k_fullac_dp8_sdpa" \
+      --training_trace_dump_folder "exp/debug5_1B_1x4k_fullac_dp8_sdpa_rerun_rerun" \
       --training_fsdp_reshard_after_forward "default" \
       --training_context_parallel_degree 1 \
       --training_context_parallel_rotate_method "allgather" \
@@ -127,8 +127,6 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --training_gc_freq 500 \
       --training_seed 2025 \
       --training_deterministic false \
-      --training_steps 10000 \
-      --training_warmup_steps 200 \
       --training_max_norm 1.0 \
       --training_activation_checkpoint_mode "full" \
       --training_activation_checkpoint_selective_ac_option "op" \
@@ -137,7 +135,11 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --training_profiling_freq 100 \
       --training_profiling_enable_memory_snapshot true \
       --training_profiling_save_memory_snapshot_folder "memory_snapshot" \
-      --training_optimizer_name "AdamW" \
-      --training_optimizer_lr 8e-4 \
-      --training_optimizer_impl "fused"
+      --optimizer_name "AdamW" \
+      --optimizer_lr 8e-4 \
+      --optimizer_impl "fused" \
+      --lr_scheduler_steps 10000 \
+      --lr_scheduler_warmup_steps 200 \
+      --lr_scheduler_decay_type "linear" \
+      --lr_scheduler_lr_min 0.0
 fi
