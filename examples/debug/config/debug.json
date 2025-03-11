@@ -27,7 +27,7 @@
     "rope_type": "llama3"
   },
   "rope_theta": 500000.0,
-  "tie_word_embeddings": true,
+  "tie_word_embeddings": false,
   "torch_dtype": "bfloat16",
   "use_cache": false,
   "attn_implementation": "sdpa",

@@ -234,7 +234,7 @@ def ensure_pp_loss_visible(
     """
 
     # V Block Schedules return loss on rank 0
-    if job_config.experimental.pipeline_parallel_schedule == "ZBVZeroBubble":
+    if job_config.training_pipeline_parallel_schedule == "ZBVZeroBubble":
         return
 
     # Calculate the rank where loss is visible (first rank of the last pipeline stage)

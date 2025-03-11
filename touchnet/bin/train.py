@@ -179,6 +179,7 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
 
     # apply parallelisms and initialization
     if parallel_dims.pp_enabled:
+        assert not model_config.tie_word_embeddings, "TODO(xcsong): PP supports tied embeddings"
         # apply PT-D Pipeline Parallel
         job_config.training_batchsize = data_config.dataset_batchsize
         (
@@ -362,6 +363,7 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
                 with train_context(optional_context_parallel_ctx):
                     targets, losses = (labels, []) if has_last_stage else (None, None)
                     if has_first_stage:
+                        assert inputs_embeds is None, "TODO(xcsong): PP supports inputs_embeds"
                         pp_schedule.step(
                             input_ids,
                             position_ids=position_ids,

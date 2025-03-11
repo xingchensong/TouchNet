@@ -561,7 +561,7 @@ def build_pipeline_schedule(
     # validate that the batch size is divisible by the number of microbatches otherwise we'll hang or error during training
     if job_config.training_batchsize % n_microbatches != 0:
         raise ValueError(
-            f"Batch size {job_config.training.batch_size} must be divisible by number of microbatches {n_microbatches}. "
+            f"Batch size {job_config.training_batchsize} must be divisible by number of microbatches {n_microbatches}. "
             "Update the config arguments for either dataset_batchsize or training_pipeline_parallel_microbatches."
         )
 

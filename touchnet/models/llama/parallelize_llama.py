@@ -144,7 +144,11 @@ def apply_tp(
     #       by folding (and unfolding) the batch dimension and the sequence dimension.
     #       Examples can be found at https://github.com/pytorch/torchtitan/pull/437
     submodel = getattr(model, f"{base_model_prefix}")
-    for layer_id, transformer_block in submodel.layers.named_children():
+    if isinstance(submodel.layers, torch.nn.ModuleDict):
+        transformer_blocks = submodel.layers.values()
+    else:
+        transformer_blocks = submodel.layers
+    for transformer_block in transformer_blocks:
         layer_plan = {
             "input_layernorm": SequenceParallel(),
             "self_attn": prepare_module_input(

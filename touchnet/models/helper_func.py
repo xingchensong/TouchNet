@@ -154,7 +154,11 @@ def apply_fsdp(
 
     base_model_prefix = getattr(model, "base_model_prefix", "model")
     submodel = getattr(model, f"{base_model_prefix}")
-    for layer_id, transformer_block in enumerate(submodel.layers):
+    if isinstance(submodel.layers, nn.ModuleDict):
+        layer_items = [(int(k), v) for (k, v) in submodel.layers.items()]
+    else:
+        layer_items = list(enumerate(submodel.layers))
+    for layer_id, transformer_block in layer_items:
         if reshard_after_forward_policy == "always":
             reshard_after_forward = True
         elif reshard_after_forward_policy == "never":
@@ -167,7 +171,7 @@ def apply_fsdp(
             else:
                 # As an optimization, do not reshard after forward for the last
                 # transformer block since FSDP would prefetch it immediately
-                reshard_after_forward = int(layer_id) < len(submodel.layers) - 1
+                reshard_after_forward = int(layer_id) < len(layer_items) - 1
         else:
             raise ValueError(
                 f"Invalid reshard_after_forward_policy: {reshard_after_forward_policy}."
