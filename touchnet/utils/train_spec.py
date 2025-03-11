@@ -7,7 +7,7 @@
 # Copyright (c) Meta Platforms, Inc. All Rights Reserved.
 
 from dataclasses import dataclass
-from typing import Callable, Type, TypeAlias
+from typing import Callable, Optional, Type, TypeAlias
 
 import torch
 import torch.nn as nn
@@ -17,6 +17,7 @@ from transformers import AutoConfig
 from touchnet.bin import TrainConfig
 from touchnet.data.dataloader import BaseDataLoader
 from touchnet.tokenizer.tokenizer import BaseTokenizer
+from touchnet.utils.metrics import MetricsProcessor
 from touchnet.utils.optimizer import LRSchedulersContainer, OptimizersContainer
 
 OptimizersBuilder: TypeAlias = Callable[
@@ -26,6 +27,7 @@ LRSchedulersBuilder: TypeAlias = Callable[[OptimizersContainer], LRSchedulersCon
 LossFunction: TypeAlias = Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
 DataLoaderBuilder: TypeAlias = Callable[..., BaseDataLoader]
 TokenizerBuilder: TypeAlias = Callable[..., BaseTokenizer]
+MetricsProcessorBuilder: TypeAlias = Callable[..., MetricsProcessor]
 
 
 @dataclass
@@ -42,9 +44,7 @@ class TrainSpec:
     build_dataloader_fn: DataLoaderBuilder
     build_tokenizer_fn: TokenizerBuilder
     loss_fn: LossFunction
-
-    # TODO: Add a FQN convert fn to allow users to load checkpoints from
-    # HuggingFace or other sources that have different FQN conventions.
+    build_metrics_processor_fn: Optional[MetricsProcessorBuilder] = None
 
 
 _train_specs = {}
