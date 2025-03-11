@@ -27,12 +27,9 @@ from touchnet.utils.distributed import (GarbageCollection, ParallelDims,
                                         dist_mean, get_train_context,
                                         init_distributed, set_determinism,
                                         set_pg_timeouts)
-from touchnet.utils.logging import Color, init_logger, logger
-from touchnet.utils.metrics import (build_device_memory_monitor,
-                                    build_metric_logger,
-                                    ensure_pp_loss_visible,
-                                    get_num_flop_per_token, get_num_params,
-                                    get_peak_flops)
+from touchnet.utils.logging import init_logger, logger
+from touchnet.utils.metrics import (ensure_pp_loss_visible,
+                                    get_num_flop_per_token, get_num_params)
 from touchnet.utils.profiling import (maybe_enable_memory_snapshot,
                                       maybe_enable_profiling)
 from touchnet.utils.train_spec import get_train_spec
@@ -104,10 +101,6 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
     device = torch.device(f"{device_type}:{int(os.environ['LOCAL_RANK'])}")
     device_module.set_device(device)
     init_distributed(job_config)
-    # initialize device memory monitor and get peak flops for MFU calculation
-    device_memory_monitor = build_device_memory_monitor()
-    gpu_peak_flops = get_peak_flops(device_memory_monitor.device_name)
-    logger.info(f"Peak FLOPS used for computing MFU: {gpu_peak_flops:.3e}")
 
     # build meshes
     world_mesh = parallel_dims.build_mesh(device_type=device_type)
@@ -152,21 +145,25 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
         # NOTE: defer weight initialization until after parallelisms are applied
         model.apply(lambda m: setattr(m, "_is_hf_initialized", False))
 
+    # metrics logging
+    metrics_processor = train_spec.build_metrics_processor_fn(job_config, parallel_dims)
+    color = metrics_processor.color
+
     # log model size
     model_param_count = get_num_params(model, exclude_embedding=False)
     model_param_count_wo_emb = get_num_params(model, exclude_embedding=True)
     # TODO(xcsong): support encoder-decoder flops
-    num_flop_per_token = get_num_flop_per_token(
+    metrics_processor.num_flop_per_token = get_num_flop_per_token(
         model_param_count_wo_emb,
         model_config,
         data_config.dataset_text_seqlen,
     )
     logger.info(
-        f"{Color.red}size: {model_param_count:,} total parameters ({model_param_count/1000000000.0:4f} B){Color.reset}"
+        f"{color.red}size: {model_param_count:,} total parameters ({model_param_count/1000000000.0:4f} B){color.reset}"
     )
     logger.info(
-        f"{Color.red}size (wo emb): {model_param_count_wo_emb:,}" +
-        f" total parameters (wo emb) ({model_param_count_wo_emb/1000000000.0:4f} B){Color.reset}"
+        f"{color.red}size (wo emb): {model_param_count_wo_emb:,}" +
+        f" total parameters (wo emb) ({model_param_count_wo_emb/1000000000.0:4f} B){color.reset}"
     )
 
     # move sharded model to CPU/GPU and initialize weights via DTensor
@@ -212,7 +209,7 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
             m.train()
 
         # confirm that user will be able to view loss metrics on the console
-        ensure_pp_loss_visible(parallel_dims, job_config, Color)
+        ensure_pp_loss_visible(parallel_dims, job_config, color)
 
     else:
         # apply PT-D Tensor Parallel, activation checkpointing, torch.compile, Data Parallel
@@ -225,7 +222,8 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
 
         model_parts = [model]
 
-    device_mem_stats = device_memory_monitor.get_peak_stats()
+    logger.info(f"Peak FLOPS used for computing MFU: {metrics_processor.gpu_peak_flops:.3e}")
+    device_mem_stats = metrics_processor.device_memory_monitor.get_peak_stats()
     logger.info(
         f"{device_type.upper()} memory usage for model: "
         f"{device_mem_stats.max_reserved_gib:.2f}GiB"
@@ -235,6 +233,8 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
     # build optimizer after applying parallelisms to the model
     optimizers = train_spec.build_optimizers_fn(model_parts, job_config)
     lr_schedulers = train_spec.build_lr_schedulers_fn(optimizers, job_config)
+    metrics_processor.optimizers = optimizers
+    metrics_processor.lr_schedulers = lr_schedulers
 
     train_state = TrainState()
 
@@ -260,18 +260,6 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
         return
 
     checkpoint.load(step=job_config.training_ckpt_load_step)
-    metric_logger = build_metric_logger(job_config, parallel_dims)
-
-    # plot losses loaded from checkpoint (if any) to TensorBoard
-    # NOTE: Loss info after the last log step before checkpoint saving will not be ploted.
-    #       This can be avoided by setting training_ckpt_interval to be a multiple of training_log_freq
-    if train_state.step > 0:
-        for idx, step in enumerate(train_state.log_steps):
-            metrics = {
-                "loss_metrics/global_avg_loss": train_state.global_avg_losses[idx],
-                "loss_metrics/global_max_loss": train_state.global_max_losses[idx],
-            }
-            metric_logger.log(metrics, step=step)
 
     data_iterator = iter(dataloader)
 
@@ -279,12 +267,6 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
         parallel_dims.loss_parallel_enabled,
         job_config.training_enable_compiled_autograd,
     )
-
-    # variables used to keep info for metrics logging
-    ntokens_since_last_log = 0
-    data_loading_times = []
-    time_last_log = time.perf_counter()
-    device_memory_monitor.reset_peak_stats()
 
     # train loop
     # TODO(xcsong): support gradient accumalation steps?
@@ -311,8 +293,10 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
             labels, position_ids = batch["labels"], batch["position_ids"]
             inputs_embeds = batch["inputs_embeds"]
             input_ids = batch["input_ids"]
-            ntokens_since_last_log += labels.numel()
-            data_loading_times.append(time.perf_counter() - data_load_start)
+            metrics_processor.ntokens_since_last_log += labels.numel()
+            metrics_processor.data_loading_times.append(
+                time.perf_counter() - data_load_start
+            )
 
             """
             TODO[flame]: We need to carefully handle the position_ids for TP/CP
@@ -413,10 +397,7 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
             lr_schedulers.step()
 
             # log metrics
-            if (
-                train_state.step == 1
-                or train_state.step % job_config.training_log_freq == 0
-            ):
+            if metrics_processor.should_log(train_state.step):
                 if (
                     parallel_dims.dp_replicate_enabled
                     or parallel_dims.dp_shard_enabled
@@ -430,61 +411,9 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
                 else:
                     global_avg_loss = global_max_loss = loss.item()
 
-                # update train state
-                train_state.log_steps.append(train_state.step)
-                train_state.global_avg_losses.append(global_avg_loss)
-                train_state.global_max_losses.append(global_max_loss)
-
-                time_delta = time.perf_counter() - time_last_log
-
-                # tokens per second per device, abbreviated as tps
-                tps = ntokens_since_last_log / (
-                    time_delta * parallel_dims.non_data_parallel_size
+                metrics_processor.log(
+                    train_state.step, global_avg_loss, global_max_loss
                 )
-                # model FLOPS utilization
-                # For its definition and calculation, please refer to the PaLM paper:
-                # https://arxiv.org/abs/2204.02311
-                mfu = 100 * num_flop_per_token * tps / gpu_peak_flops
-                tflops = num_flop_per_token * tps / 1e12
-
-                time_end_to_end = time_delta / job_config.training_log_freq
-                time_data_loading = sum(data_loading_times) / len(data_loading_times)
-                time_data_loading_pct = 100 * sum(data_loading_times) / time_delta
-
-                device_mem_stats = device_memory_monitor.get_peak_stats()
-
-                metrics = {
-                    "loss_metrics/global_avg_loss": global_avg_loss,
-                    "loss_metrics/global_max_loss": global_max_loss,
-                    "throughput(tps)": tps,
-                    "tflops": tflops,
-                    "mfu(%)": mfu,
-                    "time_metrics/end_to_end(s)": time_end_to_end,
-                    "time_metrics/data_loading(s)": time_data_loading,
-                    "time_metrics/data_loading(%)": time_data_loading_pct,
-                    "memory/max_active(GiB)": device_mem_stats.max_active_gib,
-                    "memory/max_active(%)": device_mem_stats.max_active_pct,
-                    "memory/max_reserved(GiB)": device_mem_stats.max_reserved_gib,
-                    "memory/max_reserved(%)": device_mem_stats.max_reserved_pct,
-                    "memory/num_alloc_retries": device_mem_stats.num_alloc_retries,
-                    "memory/num_ooms": device_mem_stats.num_ooms,
-                }
-                metric_logger.log(metrics, step=train_state.step)
-
-                logger.info(
-                    f"{Color.red}step: {train_state.step:2}  "
-                    f"{Color.green}loss: {global_avg_loss:7.4f}  "
-                    f"{Color.yellow}memory: {device_mem_stats.max_reserved_gib:5.2f}GiB"
-                    f"({device_mem_stats.max_reserved_pct:.2f}%)  "
-                    f"{Color.blue}tps: {round(tps):,}  "
-                    f"{Color.cyan}tflops: {tflops:,.2f}  "
-                    f"{Color.magenta}mfu: {mfu:.2f}%{Color.reset}"
-                )
-
-                ntokens_since_last_log = 0
-                data_loading_times.clear()
-                time_last_log = time.perf_counter()
-                device_memory_monitor.reset_peak_stats()
 
             checkpoint.save(
                 train_state.step, force=(train_state.step == job_config.training_steps)
@@ -508,7 +437,7 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
         logger.info("Sleeping 2 seconds for other ranks to complete")
         time.sleep(2)
 
-    metric_logger.close()
+    metrics_processor.close()
     logger.info("Training completed")
 
 

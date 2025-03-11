@@ -5,6 +5,7 @@ from touchnet.data.dataloader import build_dataloader
 from touchnet.models.llama.parallelize_llama import parallelize_llama
 from touchnet.models.llama.pipeline_llama import pipeline_llama
 from touchnet.tokenizer.tokenizer import build_tokenizer
+from touchnet.utils.metrics import build_metrics_processor
 from touchnet.utils.optimizer import build_lr_schedulers, build_optimizers
 from touchnet.utils.train_spec import TrainSpec, register_train_spec
 
@@ -28,5 +29,6 @@ register_train_spec(
         build_dataloader_fn=build_dataloader,
         build_tokenizer_fn=build_tokenizer,
         loss_fn=cross_entropy_loss,
+        build_metrics_processor_fn=build_metrics_processor,
     )
 )
