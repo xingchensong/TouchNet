@@ -86,7 +86,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
   # export TORCHDYNAMO_VERBOSE=1
   torchrun --nnodes=$num_nodes --nproc_per_node=$num_gpus \
            --rdzv_id=$job_id --rdzv_backend="c10d" --rdzv_endpoint=$HOST_NODE_ADDR \
-           --local-ranks-filter "0" \
+           --local-ranks-filter "0,4" \
     touchnet/bin/train.py \
       --tokenizer_model "/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct" \
       --tokenizer_type "HuggingFaceTokenizer" \
@@ -96,8 +96,8 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --dataset_shuffling true \
       --dataset_mmap true \
       --dataset_batchsize 1 \
-      --dataset_text_seqlen 65536 \
-      --text_max_length_in_tokens_for_filter 65536 \
+      --dataset_text_seqlen 4096 \
+      --text_max_length_in_tokens_for_filter 4096 \
       --text_min_length_in_tokens_for_filter 1 \
       --dataloader_num_workers 6 \
       --dataloader_prefetch_factor 6 \
@@ -105,12 +105,12 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --training_model_name "llama" \
       --training_model_config_path "config/debug.json" \
       --training_print_args true \
-      --training_trace_dump_folder "exp/debug5_1B_1x64k_fullac_cp4tp2splp_sdpa_rerun" \
+      --training_trace_dump_folder "exp/debug5_1B_1x4k_fullac_dp8_sdpa" \
       --training_fsdp_reshard_after_forward "default" \
-      --training_context_parallel_degree 4 \
+      --training_context_parallel_degree 1 \
       --training_context_parallel_rotate_method "allgather" \
-      --training_tensor_parallel_degree 2 \
-      --training_enable_loss_parallel true\
+      --training_tensor_parallel_degree 1 \
+      --training_enable_loss_parallel false \
       --training_pipeline_parallel_degree 1 \
       --training_pipeline_parallel_schedule "1F1B" \
       --training_enable_ckpt true \
@@ -131,7 +131,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --training_warmup_steps 200 \
       --training_max_norm 1.0 \
       --training_activation_checkpoint_mode "full" \
-      --training_activation_checkpoint_selective_ac_option "2" \
+      --training_activation_checkpoint_selective_ac_option "op" \
       --training_enable_profiling false \
       --training_profiling_traces_folder "profile_traces" \
       --training_profiling_freq 100 \
