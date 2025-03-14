@@ -182,4 +182,4 @@ data.list
 
 # Experiments
 exp/
-data/
+examples/*/data/
