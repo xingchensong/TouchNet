@@ -369,9 +369,15 @@ def batch_text(data, config: DataConfig, tokenizer: BaseTokenizer):
         Then we got:
             input_ids: [8, 131072] = 8 * 131072 * 8 / 8 / 1024 / 1024 = 1MB
             labels: [8, 131072] = 8 * 131072 * 8 / 8 / 1024 / 1024 = 1MB
+            sentence_ids: [8, 131072] = 8 * 131072 * 8 / 8 / 1024 / 1024 = 1MB
+                example sentence_ids for packed sequence:
+                    [[1, 1, 1, 2, 2, 2, 0],
+                     [1, 1, 2, 2, 2, 3, 3]]
             position_ids: [8, 131072] = 8 * 131072 * 8 / 8 / 1024 / 1024 = 1MB
-            # attention_mask: [8, 1, 131072, 131072] = 8 * 131072 * 131072 / 8 / 1024 / 1024 / 1024 = 16GB
-        So the total memory cost is around 3MB.
+                example position_ids for packed sequence:
+                    [[0, 1, 2, 0, 1, 2, 0],
+                     [0, 1, 0, 1, 2, 0, 1]]
+        So the total memory cost is around 4MB.
     """
     buffer = {
         "input_ids": torch.zeros([config.dataset_batchsize,
@@ -381,11 +387,12 @@ def batch_text(data, config: DataConfig, tokenizer: BaseTokenizer):
                                config.dataset_text_seqlen], dtype=torch.int64) + tokenizer.eos,
         "position_ids": torch.zeros([config.dataset_batchsize,
                                      config.dataset_text_seqlen], dtype=torch.int64),
-        "audio_lengths": None,
-        "text_lengths": [[]],
+        "sentence_ids": torch.zeros([config.dataset_batchsize,
+                                     config.dataset_text_seqlen], dtype=torch.int64),
     }
     cur_batch_idx = 0
     cur_text_idx = 0
+    cur_sentence_idx = 1
     for sample in data:
         text_len = len(sample['input_ids']) + 1  # +1 for sos/eos
         if cur_batch_idx == config.dataset_batchsize - 1:
@@ -400,24 +407,25 @@ def batch_text(data, config: DataConfig, tokenizer: BaseTokenizer):
                                            config.dataset_text_seqlen], dtype=torch.int64),
                     "position_ids": torch.zeros([config.dataset_batchsize,
                                                  config.dataset_text_seqlen], dtype=torch.int64),
-                    "audio_lengths": None,
-                    "text_lengths": [[]],
+                    "sentence_ids": torch.zeros([config.dataset_batchsize,
+                                                 config.dataset_text_seqlen], dtype=torch.int64),
                 }
                 cur_batch_idx = 0
                 cur_text_idx = 0
+                cur_sentence_idx = 1
         else:
             if cur_text_idx + text_len > config.dataset_text_seqlen:
                 cur_batch_idx += 1
                 cur_text_idx = 0
-                buffer["text_lengths"].append([])
-                assert len(buffer["text_lengths"]) == cur_batch_idx + 1
+                cur_sentence_idx = 1
         buffer["input_ids"][cur_batch_idx, cur_text_idx:cur_text_idx + text_len] = \
             torch.tensor([tokenizer.bos] + sample['input_ids'], dtype=torch.int64)
         buffer["labels"][cur_batch_idx, cur_text_idx:cur_text_idx + text_len] = \
             torch.tensor(sample['input_ids'] + [tokenizer.eos], dtype=torch.int64)
         buffer["position_ids"][cur_batch_idx, cur_text_idx:cur_text_idx + text_len] = torch.arange(
             0, text_len, dtype=torch.int64)
-        buffer["text_lengths"][cur_batch_idx].append(text_len)
+        buffer["sentence_ids"][cur_batch_idx, cur_text_idx:cur_text_idx + text_len] = cur_sentence_idx
         cur_text_idx += text_len
+        cur_sentence_idx += 1
     if cur_batch_idx > 0:
         yield buffer

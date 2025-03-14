@@ -131,14 +131,21 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
     # build model (using meta init)
     model_cls = train_spec.model_cls
     config_cls = train_spec.config_cls
-    model_config = config_cls.from_pretrained(job_config.training_model_config_path)
+    model_config = config_cls.from_pretrained(job_config.training_model_config_path,
+                                              attn_implementation="flex_attention")
     model_config.return_dict = False  # NOTE: for compatibility with pipeline parallel
+    use_flex_attention = model_config._attn_implementation == "flex_attention"
+    if use_flex_attention:
+        job_config.training_compile = False  # TODO(xcsong): support flex_attention with torch.compile
     assert model_config.vocab_size == tokenizer.vocab_size
     assert model_config.bos_token_id == tokenizer.bos
     assert model_config.eos_token_id == tokenizer.eos
 
     logger.info(
         f"Building {train_spec.name} with {model_config}"
+    )
+    logger.info(
+        f"Attention: {model_config._attn_implementation}"
     )
     with torch.device("meta"):
         model = model_cls.from_config(model_config)
@@ -293,6 +300,7 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
             labels, position_ids = batch["labels"], batch["position_ids"]
             inputs_embeds = batch["inputs_embeds"]
             input_ids = batch["input_ids"]
+            sentence_ids = batch["sentence_ids"]
             metrics_processor.ntokens_since_last_log += labels.numel()
             metrics_processor.data_loading_times.append(
                 time.perf_counter() - data_load_start
@@ -312,7 +320,10 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
             """
             labels = labels.to(device_type)
             position_ids = position_ids.to(device_type)
-            cp_buffers, cp_no_restore_buffers, cp_seq_dims = [labels, position_ids], [labels, position_ids], [1, 1]
+            sentence_ids = sentence_ids.to(device_type)
+            cp_buffers = [labels, position_ids, sentence_ids]
+            cp_no_restore_buffers = [labels, position_ids, sentence_ids]
+            cp_seq_dims = [1, 1, 1]
             if inputs_embeds is not None:
                 inputs_embeds = inputs_embeds.to(device_type)
                 cp_buffers.append(inputs_embeds)
@@ -351,12 +362,14 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
                         pp_schedule.step(
                             input_ids,
                             position_ids=position_ids,
+                            attention_mask=sentence_ids if use_flex_attention else None,
                             target=targets,
                             losses=losses
                         )
                     else:
                         pp_schedule.step(
                             position_ids=position_ids,
+                            attention_mask=sentence_ids if use_flex_attention else None,
                             target=targets,
                             losses=losses
                         )
@@ -375,6 +388,7 @@ def main(tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config:
                         input_ids=input_ids,
                         inputs_embeds=inputs_embeds,
                         position_ids=position_ids,
+                        attention_mask=sentence_ids if use_flex_attention else None,
                     )
                     # pred.logits.shape=(bs, seq_len, vocab_size)
                     loss = train_spec.loss_fn(pred, labels)
