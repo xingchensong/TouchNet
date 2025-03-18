@@ -10,7 +10,6 @@ from torch.distributed.nn.functional import all_gather
 def calc_batch_dp_loss(batch_input_ids=None, batch_labels=None):
     batch_input_ids = batch_input_ids.detach().clone()  # [batch, length, vocab]
     batch_labels = batch_labels.detach().clone()        # [batch, length]
-    world_size = 4
     world_size = dist.get_world_size()
     rank = dist.get_rank()
     assert len(batch_input_ids) % world_size == 0
@@ -42,7 +41,7 @@ def calc_batch_dp_loss(batch_input_ids=None, batch_labels=None):
 
 def calc_pack_sp_loss(pack_input_ids=None, pack_labels=None, num_tokens=None):
     # NOTE(xcsong): In pack mode, we assume batch_size == 1 and sp == world_size
-    pack_input_ids = pack_input_ids.detach().clone()  # [length, vpcab]
+    pack_input_ids = pack_input_ids.detach().clone()  # [length, vocab]
     pack_labels = pack_labels.detach().clone()        # [length]
     world_size = dist.get_world_size()
     rank = dist.get_rank()
@@ -95,7 +94,7 @@ def run_distributed(func, world_size, *args):
 def _dist_worker(rank, func, world_size, args, results):
     torch.distributed.init_process_group(
         backend='gloo',
-        init_method='tcp://127.0.0.1:29505',
+        init_method='tcp://127.0.0.1:0',  # or an 'env://' approach in your CI
         world_size=world_size,
         rank=rank
     )
@@ -147,4 +146,4 @@ def test_pack_loss(world_size):
 
     assert len(set(results_batch)) == 1, f"The results of each child process are inconsistent: {results_batch}"
     assert len(set(results_pack)) == 1, f"The results of each child process are inconsistent: {results_pack}"
-    assert abs(results_batch[0] - results_pack[0]) < 1e-6
+    assert results_batch[0] == pytest.approx(results_pack[0], abs=1e-6)
