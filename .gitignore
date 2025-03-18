@@ -171,7 +171,6 @@ cython_debug/
 .pypirc
 
 # Unit test
-tests/
 examples/test/
 
 # Data
