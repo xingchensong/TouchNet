@@ -8,6 +8,16 @@ from torch.distributed.nn.functional import all_gather
 
 
 def calc_batch_dp_loss(batch_input_ids=None, batch_labels=None):
+    """
+    Calculate loss using data parallelism (batch splitting).
+
+    Args:
+        batch_input_ids: Tensor of shape [batch, length, vocab] containing logits
+        batch_labels: Tensor of shape [batch, length] containing target indices
+
+    Returns:
+        float: The average loss across all processes
+    """
     batch_input_ids = batch_input_ids.detach().clone()  # [batch, length, vocab]
     batch_labels = batch_labels.detach().clone()        # [batch, length]
     world_size = dist.get_world_size()
@@ -40,6 +50,17 @@ def calc_batch_dp_loss(batch_input_ids=None, batch_labels=None):
 
 
 def calc_pack_sp_loss(pack_input_ids=None, pack_labels=None, num_tokens=None):
+    """
+    Calculate loss using (packed) sequence parallelism (sequence splitting).
+
+    Args:
+        pack_input_ids: Tensor of shape [length, vocab] containing logits
+        pack_labels: Tensor of shape [length] containing target indices
+        num_tokens: number of tokens for each sentence
+
+    Returns:
+        float: The average loss across all processes
+    """
     # NOTE(xcsong): In pack mode, we assume batch_size == 1 and sp == world_size
     pack_input_ids = pack_input_ids.detach().clone()  # [length, vocab]
     pack_labels = pack_labels.detach().clone()        # [length]
@@ -94,7 +115,7 @@ def run_distributed(func, world_size, *args):
 def _dist_worker(rank, func, world_size, args, results):
     torch.distributed.init_process_group(
         backend='gloo',
-        init_method='tcp://127.0.0.1:0',  # or an 'env://' approach in your CI
+        init_method='tcp://127.0.0.1:29505',
         world_size=world_size,
         rank=rank
     )
@@ -106,8 +127,9 @@ def _dist_worker(rank, func, world_size, args, results):
         dist.destroy_process_group()
 
 
-# NOTE(xcsong): https://zhuanlan.zhihu.com/p/721652210
-#               https://github.com/THUDM/LongAlign/issues/3
+# NOTE(xcsong): The following references provide context for pack loss implementation:
+# - Technical explanation of pack mode vs batch mode: https://zhuanlan.zhihu.com/p/721652210
+# - Related implementation discussion: https://github.com/THUDM/LongAlign/issues/3
 @pytest.mark.parametrize("world_size", [2, 4, 8])
 def test_pack_loss(world_size):
     a1 = torch.randn(5, 9).float()
