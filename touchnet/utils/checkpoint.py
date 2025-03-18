@@ -56,6 +56,17 @@ class ModelWrapper(Stateful):
         return self.cache_state_dict
 
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+        """
+        Load a state dictionary into all models and update the internal cache.
+        
+        This method applies the provided state dictionary to each model using non-strict
+        set_model_state_dict. Since set_model_state_dict alters the keys of the state dictionary,
+        the internal cache_state_dict is reinitialized by aggregating the updated state dictionaries
+        from each model.
+        
+        Args:
+            state_dict: A dictionary containing the model state information.
+        """
         func = functools.partial(
             set_model_state_dict,
             model_state_dict=state_dict,
@@ -195,6 +206,16 @@ class CheckpointManager:
         states: Dict[str, Any],
         job_config: TrainConfig,
     ) -> None:
+        """
+        Initialize the checkpoint manager with training components and configuration.
+        
+        If checkpointing is enabled in the job configuration, this constructor updates the state
+        dictionary with the model, optimizer, dataloader, and learning rate scheduler, and configures
+        asynchronous or synchronous checkpointing based on the specified async mode. It may set up
+        staging with pinned memory, start a purge thread for retaining recent checkpoints, or launch
+        a separate process for asynchronous saving. Raises a ValueError if the retention policy or
+        async mode is misconfigured.
+        """
         self.enable_checkpoint = job_config.training_enable_ckpt
 
         async_mode = job_config.training_ckpt_async_mode.lower()
