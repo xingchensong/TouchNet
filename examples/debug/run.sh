@@ -96,8 +96,8 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --dataset_shuffling true \
       --dataset_mmap true \
       --dataset_batchsize 1 \
-      --dataset_text_seqlen 32768 \
-      --text_max_length_in_tokens_for_filter 32768 \
+      --dataset_text_seqlen 16384 \
+      --text_max_length_in_tokens_for_filter 16384 \
       --text_min_length_in_tokens_for_filter 1 \
       --dataloader_num_workers 6 \
       --dataloader_prefetch_factor 6 \
@@ -105,17 +105,18 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --training_model_name "llama" \
       --training_model_config_path "config/debug.json" \
       --training_print_args true \
-      --training_trace_dump_folder "exp/debug5_1B_1x32k_fullac_cp4tp2dp1_flex" \
+      --training_trace_dump_folder "exp/debug5_1B_1x16k_fullac_cp4tp1dp2_flex_packloss_reporttokenloss" \
       --training_fsdp_reshard_after_forward "default" \
       --training_context_parallel_degree 4 \
       --training_context_parallel_rotate_method "allgather" \
-      --training_tensor_parallel_degree 2 \
+      --training_tensor_parallel_degree 1 \
       --training_enable_loss_parallel true \
       --training_pipeline_parallel_degree 1 \
       --training_pipeline_parallel_schedule "1F1B" \
       --training_enable_ckpt true \
       --training_ckpt_load_step -1 \
       --training_ckpt_interval 100 \
+      --training_ckpt_keep_latest_k 2 \
       --training_log_freq 1 \
       --training_enable_tensorboard true \
       --training_save_tb_folder "tensorboard" \
@@ -133,8 +134,9 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --training_enable_profiling true \
       --training_profiling_traces_folder "profile_traces" \
       --training_profiling_freq 100 \
-      --training_profiling_enable_memory_snapshot true \
-      --training_profiling_save_memory_snapshot_folder "memory_snapshot" \
+      --training_profiling_keep_first_k 10 \
+      --training_enable_memory_snapshot true \
+      --training_memory_snapshot_folder "memory_snapshot" \
       --optimizer_name "AdamW" \
       --optimizer_lr 8e-4 \
       --optimizer_impl "fused" \

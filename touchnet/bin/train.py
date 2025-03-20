@@ -24,7 +24,7 @@ from touchnet.utils.distributed import (GarbageCollection, ParallelDims,
                                         clip_grad_norm_,
                                         create_context_parallel_ctx,
                                         device_module, device_type, dist_max,
-                                        dist_sum, get_train_context,
+                                        dist_mean, dist_sum, get_train_context,
                                         init_distributed, set_determinism,
                                         set_pg_timeouts)
 from touchnet.utils.logging import init_logger, logger
@@ -292,7 +292,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         sentence_lens = batch["sentence_lens"]
         num_sentence = batch["num_sentence"]
         if self.parallel_dims.dp_enabled:
-            # NOTE(xcsong): we use global-batch-size for DP, so we need to sum num_sentence
+            # NOTE(xcsong): we use global-batch, so we need to sum num_sentence
             num_sentence = torch.tensor(num_sentence, dtype=torch.int64).to(device_type)
             num_sentence = dist_sum(num_sentence, mesh=self.world_mesh["dp"])
         self.metrics_processor.ntokens_since_last_log += labels.numel()
@@ -408,10 +408,11 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                     attention_mask=sentence_ids if self.use_flex_attention else None,
                 )
                 # logits.shape = pred[0].shape = (bs, seq_len // cp, vocab_size // tp)
-                loss = self.train_spec.loss_fn(pred, labels, sentence_lens, num_sentence)  # (1,)
+                loss_per_sample, loss_per_token = self.train_spec.loss_fn(
+                    pred, labels, sentence_lens, num_sentence)  # (1,), (1,)
                 # need to free to before bwd to avoid peaking memory
                 del pred
-                loss.backward()
+                loss_per_sample.backward()
 
         # clip gradients
         norm = clip_grad_norm_(
@@ -439,16 +440,19 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                 or self.parallel_dims.dp_shard_enabled
                 or self.parallel_dims.cp_enabled
             ):
-                loss = loss.detach()
-                global_avg_loss, global_max_loss = (
-                    dist_sum(loss, self.world_mesh["dp_cp"]),
-                    dist_max(loss, self.world_mesh["dp_cp"]),
+                loss_per_sample = loss_per_sample.detach()
+                loss_per_token = loss_per_token.detach()
+                global_avg_loss_per_sample = dist_sum(loss_per_sample, self.world_mesh["dp_cp"])
+                global_avg_loss_per_token, global_max_loss_per_token = (
+                    dist_mean(loss_per_token, self.world_mesh["dp_cp"]),
+                    dist_max(loss_per_token, self.world_mesh["dp_cp"]),
                 )
             else:
-                global_avg_loss = global_max_loss = loss.item()
+                raise NotImplementedError("TODO: support other parallelisms")
 
             self.metrics_processor.log(
-                self.step, global_avg_loss, global_max_loss,
+                self.step, global_avg_loss_per_sample,
+                global_avg_loss_per_token, global_max_loss_per_token,
                 norm.mean().detach().item(), norm.max().detach().item(),
             )
 

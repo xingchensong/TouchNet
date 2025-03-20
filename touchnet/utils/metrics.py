@@ -399,8 +399,9 @@ class MetricsProcessor:
     def should_log(self, step: int) -> bool:
         return step == 1 or step % self.job_config.training_log_freq == 0
 
-    def log(self, step: int, global_avg_loss: float, global_max_loss: float,
-            avg_grad_norm: float, max_grad_norm: float):
+    def log(self, step: int, global_avg_loss_per_sample: float,
+            global_avg_loss_per_token: float, global_max_loss_per_token: float,
+            global_avg_grad_norm: float, global_max_grad_norm: float):
         assert self.num_flop_per_token > 0, "num_flop_per_token must be set"
 
         time_delta = time.perf_counter() - self.time_last_log
@@ -422,10 +423,11 @@ class MetricsProcessor:
         device_mem_stats = self.device_memory_monitor.get_peak_stats()
 
         metrics = {
-            "loss_metrics/global_avg_loss": global_avg_loss,
-            "loss_metrics/global_max_loss": global_max_loss,
-            "loss_metrics/avg_grad_norm": avg_grad_norm,
-            "loss_metrics/max_grad_norm": max_grad_norm,
+            "loss_metrics/global_avg_loss_per_sample": global_avg_loss_per_sample,
+            "loss_metrics/global_avg_loss_per_token": global_avg_loss_per_token,
+            "loss_metrics/global_max_loss_per_token": global_max_loss_per_token,
+            "loss_metrics/global_avg_grad_norm": global_avg_grad_norm,
+            "loss_metrics/global_max_grad_norm": global_max_grad_norm,
             "throughput(tps)": tps,
             "tflops": tflops,
             "mfu(%)": mfu,
@@ -444,8 +446,9 @@ class MetricsProcessor:
         color = self.color
         logger.info(
             f"{color.red}step: {step:2}  "
-            f"{color.green}loss: {global_avg_loss:7.4f}  "
-            f"{color.green}grad norm: {avg_grad_norm:7.4f}  "
+            f"{color.green}loss (per sample): {global_avg_loss_per_sample:7.4f}  "
+            f"{color.green}loss (per token): {global_avg_loss_per_token:7.4f}  "
+            f"{color.green}grad norm: {global_avg_grad_norm:7.4f}  "
             f"{color.yellow}memory: {device_mem_stats.max_reserved_gib:5.2f}GiB"
             f"({device_mem_stats.max_reserved_pct:.2f}%)  "
             f"{color.blue}tps: {round(tps):,}  "

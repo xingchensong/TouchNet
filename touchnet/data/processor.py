@@ -384,7 +384,7 @@ def batch_text(data, config: DataConfig, tokenizer: BaseTokenizer):
                                   config.dataset_text_seqlen], dtype=torch.int64) + tokenizer.eos,
         "inputs_embeds": None,
         "labels": torch.zeros([config.dataset_batchsize,
-                               config.dataset_text_seqlen], dtype=torch.int64) + tokenizer.eos,
+                               config.dataset_text_seqlen], dtype=torch.int64) - 100,  # ignore_idx = -100
         "position_ids": torch.zeros([config.dataset_batchsize,
                                      config.dataset_text_seqlen], dtype=torch.int64),
         "sentence_ids": torch.zeros([config.dataset_batchsize,
@@ -404,10 +404,10 @@ def batch_text(data, config: DataConfig, tokenizer: BaseTokenizer):
                 # reset buffer for next batch
                 buffer = {
                     "input_ids": torch.zeros([config.dataset_batchsize,
-                                              config.dataset_text_seqlen], dtype=torch.int64),
+                                              config.dataset_text_seqlen], dtype=torch.int64) + tokenizer.eos,
                     "inputs_embeds": None,
                     "labels": torch.zeros([config.dataset_batchsize,
-                                           config.dataset_text_seqlen], dtype=torch.int64),
+                                           config.dataset_text_seqlen], dtype=torch.int64) - 100,
                     "position_ids": torch.zeros([config.dataset_batchsize,
                                                  config.dataset_text_seqlen], dtype=torch.int64),
                     "sentence_ids": torch.zeros([config.dataset_batchsize,
