@@ -103,6 +103,15 @@ class ParallelDims:
         )
 
     def build_mesh(self, device_type):
+        """
+            NOTE(xcsong): Assume we have world_size = 8 && tp = 4 && dp = 2:
+                Calling mesh["tp"] on rank 0, 1, 2, 3 returns a 1D submesh of DeviceMesh:([0, 1, 2, 3]).
+                Calling mesh["tp"] on rank 4, 5, 6, 7 returns a 1D submesh of  DeviceMesh:([4, 5, 6, 7]).
+                Calling mesh["dp"] on rank 0, 4 returns a 1D submesh of  DeviceMesh:([0, 4]).
+                Calling mesh["dp"] on rank 1, 5 returns a 1D submesh of  DeviceMesh:([1, 5]).
+                Calling mesh["dp"] on rank 2, 6 returns a 1D submesh of  DeviceMesh:([2, 6]).
+                Calling mesh["dp"] on rank 3, 7 returns a 1D submesh of  DeviceMesh:([3, 7]).
+        """
         dims = []
         names = []
         for d, name in zip(
@@ -145,6 +154,10 @@ class ParallelDims:
             )
         if dp_cp_mesh_dim_names != []:
             mesh[tuple(dp_cp_mesh_dim_names)]._flatten(mesh_dim_name="dp_cp")
+
+        logger.info(f"world_mesh: {mesh}")
+        for name in mesh.mesh_dim_names:
+            logger.info(f"[rank{dist.get_rank()}] world_mesh['{name}']: {mesh[name]}")
 
         return mesh
 
@@ -195,6 +208,10 @@ def dist_max(x: torch.Tensor, mesh: DeviceMesh) -> float:
 
 def dist_mean(x: torch.Tensor, mesh: DeviceMesh) -> float:
     return _dist_reduce(x, reduceOp=c10d.ReduceOp.AVG.name, mesh=mesh)
+
+
+def dist_sum(x: torch.Tensor, mesh: DeviceMesh) -> float:
+    return _dist_reduce(x, reduceOp=c10d.ReduceOp.SUM.name, mesh=mesh)
 
 
 def set_determinism(
