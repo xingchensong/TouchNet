@@ -24,7 +24,7 @@ from touchnet.utils.distributed import (GarbageCollection, ParallelDims,
                                         clip_grad_norm_,
                                         create_context_parallel_ctx,
                                         device_module, device_type, dist_max,
-                                        dist_mean, get_train_context,
+                                        dist_sum, get_train_context,
                                         init_distributed, set_determinism,
                                         set_pg_timeouts)
 from touchnet.utils.logging import init_logger, logger
@@ -58,6 +58,9 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
     pp_has_last_stage: bool
 
     device: torch.device
+
+    # states
+    step: int
 
     # Enable debug tracing on failure: https://pytorch.org/docs/stable/elastic/errors.html
     @record
@@ -175,6 +178,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
 
         # apply parallelisms and initialization
         if self.parallel_dims.pp_enabled:
+            raise NotImplementedError("TODO(xcsong): Pipeline Parallel with pack loss")
             assert not model_config.tie_word_embeddings, "TODO(xcsong): PP supports tied embeddings"
             # apply PT-D Pipeline Parallel
             job_config.training_batchsize = data_config.dataset_batchsize
@@ -239,8 +243,6 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         # These attributes must be initialized before checkpoint loading.
         self.step = 0
 
-        # TODO: Move the checkpoint logic to a separate method
-        # load initial checkpoint
         self.checkpointer = CheckpointManager(
             dataloader=self.dataloader,
             model_parts=self.model_parts,
@@ -271,6 +273,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         # train loop
         # TODO(xcsong): support gradient accumalation steps?
         logger.info(
+            "Trainer initialized. "
             f"Training starts at step {self.step + 1}, "
             f"with local batch size {data_config.dataset_batchsize}, "
             f"global batch size {data_config.dataset_batchsize * dp_world_size}, "
@@ -286,13 +289,19 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         inputs_embeds = batch["inputs_embeds"]
         input_ids = batch["input_ids"]
         sentence_ids = batch["sentence_ids"]
+        sentence_lens = batch["sentence_lens"]
+        num_sentence = batch["num_sentence"]
+        if self.parallel_dims.dp_enabled:
+            # NOTE(xcsong): we use global-batch-size for DP, so we need to sum num_sentence
+            num_sentence = torch.tensor(num_sentence, dtype=torch.int64).to(device_type)
+            num_sentence = dist_sum(num_sentence, mesh=self.world_mesh["dp"])
         self.metrics_processor.ntokens_since_last_log += labels.numel()
         self.metrics_processor.data_loading_times.append(
             time.perf_counter() - data_load_start
         )
 
         """
-        TODO[flame]: We need to carefully handle the position_ids for TP/CP
+        TODO: We need to carefully handle the position_ids for TP/CP
         Depending on the Models'PE, the position_ids might be different.
 
         e.g. for TP
@@ -306,24 +315,29 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         labels = labels.to(device_type)
         position_ids = position_ids.to(device_type)
         sentence_ids = sentence_ids.to(device_type)
+        sentence_lens = sentence_lens.to(device_type)
         return {
-            "input_ids": input_ids,
-            "inputs_embeds": inputs_embeds,
-            "sentence_ids": sentence_ids,
-            "labels": labels,
-            "position_ids": position_ids,
+            "input_ids": input_ids,          # [bs, seq_len]
+            "inputs_embeds": inputs_embeds,  # [bs, seq_len, dim]
+            "sentence_ids": sentence_ids,    # [bs, seq_len]
+            "sentence_lens": sentence_lens,  # [bs, seq_len]
+            "labels": labels,                # [bs, seq_len]
+            "position_ids": position_ids,    # [bs, seq_len]
+            "num_sentence": num_sentence,    # [1,]
         }
 
     def train_step(self, data: Dict[str, Any]):
         labels = data["labels"]
         position_ids = data["position_ids"]
         sentence_ids = data["sentence_ids"]
+        sentence_lens = data["sentence_lens"]
+        num_sentence = data["num_sentence"]
         input_ids = data["input_ids"]
         inputs_embeds = data["inputs_embeds"]
 
-        cp_buffers = [labels, position_ids, sentence_ids]
-        cp_no_restore_buffers = [labels, position_ids, sentence_ids]
-        cp_seq_dims = [1, 1, 1]
+        cp_buffers = [labels, position_ids, sentence_ids, sentence_lens]
+        cp_no_restore_buffers = [labels, position_ids, sentence_ids, sentence_lens]
+        cp_seq_dims = [1, 1, 1, 1]
         if inputs_embeds is not None:
             inputs_embeds = inputs_embeds.to(device_type)
             cp_buffers.append(inputs_embeds)
@@ -377,6 +391,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
 
             # accumulate losses across pipeline microbatches
             # TODO: PP+FSDP unexpectedly puts the loss back to the CPU
+            # TODO(xcsong): pack loss for pp
             loss = (
                 torch.mean(torch.stack(losses)).to(self.device)
                 if self.pp_has_last_stage
@@ -392,14 +407,14 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                     position_ids=position_ids,
                     attention_mask=sentence_ids if self.use_flex_attention else None,
                 )
-                # pred.logits.shape=(bs, seq_len, vocab_size)
-                loss = self.train_spec.loss_fn(pred, labels)
+                # logits.shape = pred[0].shape = (bs, seq_len // cp, vocab_size // tp)
+                loss = self.train_spec.loss_fn(pred, labels, sentence_lens, num_sentence)  # (1,)
                 # need to free to before bwd to avoid peaking memory
                 del pred
                 loss.backward()
 
         # clip gradients
-        clip_grad_norm_(
+        norm = clip_grad_norm_(
             [p for m in self.model_parts for p in m.parameters()],
             self.job_config.training_max_norm,
             foreach=True,
@@ -408,8 +423,13 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
 
         # optimizer step
         self.checkpointer.maybe_wait_for_staging()
-        # TODO(xcsong): skip nan norm here?
-        self.optimizers.step()
+        if norm.isnan() or norm.isinf():
+            logger.warning(
+                f"Skipping optimizer step - detected invalid gradient norm: {norm:.4f}"
+            )
+            self.optimizers.zero_grad()
+        else:
+            self.optimizers.step()
         self.lr_schedulers.step()
 
         # log metrics
@@ -421,14 +441,15 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             ):
                 loss = loss.detach()
                 global_avg_loss, global_max_loss = (
-                    dist_mean(loss, self.world_mesh["dp_cp"]),
+                    dist_sum(loss, self.world_mesh["dp_cp"]),
                     dist_max(loss, self.world_mesh["dp_cp"]),
                 )
             else:
                 global_avg_loss = global_max_loss = loss.item()
 
             self.metrics_processor.log(
-                self.step, global_avg_loss, global_max_loss
+                self.step, global_avg_loss, global_max_loss,
+                norm.mean().detach().item(), norm.max().detach().item(),
             )
 
     @record

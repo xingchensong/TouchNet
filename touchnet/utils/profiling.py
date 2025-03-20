@@ -31,6 +31,7 @@ def maybe_enable_profiling(config: TrainConfig, *, global_step: int = 0):
         save_trace_dir = config.training_profiling_traces_folder
         trace_dir = os.path.join(dump_dir, save_trace_dir)
         profile_freq = config.training_profiling_freq
+        keep_k = config.training_profiling_keep_first_k
 
         rank = torch.distributed.get_rank()
 
@@ -62,7 +63,8 @@ def maybe_enable_profiling(config: TrainConfig, *, global_step: int = 0):
                 torch.profiler.ProfilerActivity.CPU,
                 torch.profiler.ProfilerActivity.CUDA,
             ],
-            schedule=torch.profiler.schedule(wait=wait, warmup=warmup, active=active),
+            schedule=torch.profiler.schedule(wait=wait, warmup=warmup, active=active,
+                                             repeat=keep_k),
             on_trace_ready=trace_handler,
             record_shapes=True,
         ) as torch_profiler:
@@ -75,26 +77,30 @@ def maybe_enable_profiling(config: TrainConfig, *, global_step: int = 0):
 
 @contextlib.contextmanager
 def maybe_enable_memory_snapshot(config: TrainConfig, *, global_step: int = 0):
-    enable_snapshot = config.training_profiling_enable_memory_snapshot
+    enable_snapshot = config.training_enable_memory_snapshot
     if enable_snapshot:
-        snapshot_folder = config.training_profiling_save_memory_snapshot_folder
+        snapshot_folder = config.training_memory_snapshot_folder
         snapshot_dir = os.path.join(config.training_trace_dump_folder, snapshot_folder)
         if not os.path.exists(snapshot_dir):
             os.makedirs(snapshot_dir, exist_ok=True)
         rank = torch.distributed.get_rank()
+        keep_k = config.training_profiling_keep_first_k
 
         class MemoryProfiler:
-            def __init__(self, step_num: int, freq: int):
+            def __init__(self, step_num: int, freq: int, keep_k: int):
                 torch.cuda.memory._record_memory_history(
                     max_entries=MEMORY_SNAPSHOT_MAX_ENTRIES
                 )
                 # when resume training, we start from the last step
                 self.step_num = step_num
                 self.freq = freq
+                self.keep_k = keep_k
 
             def step(self, exit_ctx: bool = False):
                 self.step_num += 1
                 if not exit_ctx and self.step_num % self.freq != 0:
+                    return
+                if self.step_num // self.freq > self.keep_k:
                     return
                 if not exit_ctx:
                     curr_step = self.step_num
@@ -117,7 +123,7 @@ def maybe_enable_memory_snapshot(config: TrainConfig, *, global_step: int = 0):
                 )
 
         logger.info(f"Memory profiler active. Snapshot will be saved at {snapshot_dir}")
-        profiler = MemoryProfiler(global_step, config.training_profiling_freq)
+        profiler = MemoryProfiler(global_step, config.training_profiling_freq, keep_k)
         try:
             yield profiler
         except torch.OutOfMemoryError as e:

@@ -421,7 +421,18 @@ class TrainConfig:
             ),
         },
     )
-    training_profiling_enable_memory_snapshot: bool = field(
+    training_profiling_keep_first_k: int = field(
+        default=10,
+        metadata={
+            "help": (
+                "Keeps only the first k profiles, and purging newer ones. If 0, keep all profiles. "
+                "10 is the default value. k cannot be 1 as the last one may be in the process of being "
+                "saved. As a result, the metadata of the last one may not be ready yet. "
+                "The default value is 10 to avoid filling up the disk."
+            ),
+        },
+    )
+    training_enable_memory_snapshot: bool = field(
         default=False,
         metadata={
             "help": (
@@ -429,7 +440,7 @@ class TrainConfig:
             ),
         },
     )
-    training_profiling_save_memory_snapshot_folder: str = field(
+    training_memory_snapshot_folder: str = field(
         default="memory_snapshot",
         metadata={
             "help": (
@@ -489,7 +500,7 @@ class TrainConfig:
         metadata={
             "help": (
                 "Keeps only the latest k checkpoints, and purging older ones. If 0, keep all checkpoints. "
-                "0 is the default value. k cannot be 1 as the last one may be in the process of being "
+                "10 is the default value. k cannot be 1 as the last one may be in the process of being "
                 "saved. As a result, the metadata of the last one may not be ready yet. "
                 "The default value is 10 to avoid filling up the disk."
             ),
