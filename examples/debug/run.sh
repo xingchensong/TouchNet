@@ -23,7 +23,7 @@ else
 fi
 echo "Parsed device_ids: ${device_ids[@]}"
 
-stage=2
+stage=1
 stop_stage=2
 
 # You should change the following two parameters for multiple machine training,
@@ -37,14 +37,42 @@ train_set=wikitext-2-v1.train.repeat10000
 dev_set=wikitext-2-v1.validation
 test_sets=wikitext-2-v1.test
 
-train_config=config/debug.json
-dir=exp/debug
+param_dtype="bfloat16"
+
+seed=2025
+model_config=config/debug.json
+exp_id="debug5_1B_1x16384_fullac_cp2_tp2_dp2_pp1_flex_packloss_tieemb_fromscratch_fixROPEbug"
+cp=$(echo $exp_id | grep -oP 'cp\d+' | grep -oP '\d+')
+tp=$(echo $exp_id | grep -oP 'tp\d+' | grep -oP '\d+')
+dp=$(echo $exp_id | grep -oP 'dp\d+' | grep -oP '\d+')
+pp=$(echo $exp_id | grep -oP 'pp\d+' | grep -oP '\d+')
+bs=$(echo $exp_id | grep -oP '\d+x\d+' | grep -oP '\d+' | head -n 1)
+max_seq_len=$(echo $exp_id | grep -oP '\d+x\d+' | grep -oP '\d+' | tail -n 1)
+echo "${exp_id}: cp=${cp}, tp=${tp}, dp=${dp}, pp=${pp}, bs=${bs}, max_seq_len=${max_seq_len}"
+
+training_model_pretrained_weight_dir="/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct"
 
 tensorboard_dir=tensorboard
 num_workers=6
 prefetch=6
 
 . ./parse_options.sh || exit 1;
+
+if [[ $exp_id == *"fromseed"* ]]; then
+  training_model_pretrained_weight_dir=""
+  stage=1
+  stop_stage=2
+fi
+
+if [[ $exp_id == *"fromscratch"* ]]; then
+  stage=2
+  stop_stage=2
+fi
+
+if [[ $exp_id == *"frompretrain"* ]]; then
+  stage=1
+  stop_stage=2
+fi
 
 if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
   for x in ${train_set} ${dev_set} ${test_sets}; do
@@ -65,22 +93,26 @@ fi
 
 if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
   echo "$0: create seed checkpoint for offline initialization"
+  rm -rf "exp/${exp_id}"
+  mkdir -p "exp/${exp_id}"
   torchrun --nnodes=1 --nproc_per_node=1 \
            --rdzv_id=$job_id --rdzv_backend="c10d" --rdzv_endpoint=$HOST_NODE_ADDR \
     touchnet/bin/train.py \
       --tokenizer_model "/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct" \
       --tokenizer_type "HuggingFaceTokenizer" \
       --datalist_path "data/${train_set}/data.list" \
+      --training_seed "${seed}" \
       --training_model_name "llama" \
-      --training_model_config_path "config/debug.json" \
+      --training_model_config_path "${model_config}" \
+      --training_model_pretrained_weight_dir "${training_model_pretrained_weight_dir}" \
       --training_print_args true \
-      --training_trace_dump_folder "exp/debug" \
+      --training_trace_dump_folder "exp/${exp_id}" \
       --training_enable_ckpt true \
       --training_create_seed_ckpt true
 fi
 
 if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
-  echo "$0: starting training"
+  echo "$0: start training"
   echo "$0: num_nodes is $num_nodes, proc_per_node is $num_gpus"
   # export TORCH_LOGS="+dynamo"
   # export TORCHDYNAMO_VERBOSE=1
@@ -95,23 +127,24 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --datalist_shuffling true \
       --dataset_shuffling true \
       --dataset_mmap true \
-      --dataset_batchsize 1 \
-      --dataset_text_seqlen 16384 \
-      --text_max_length_in_tokens_for_filter 16384 \
+      --dataset_batchsize ${bs} \
+      --dataset_text_seqlen ${max_seq_len} \
+      --text_max_length_in_tokens_for_filter ${max_seq_len} \
       --text_min_length_in_tokens_for_filter 1 \
-      --dataloader_num_workers 6 \
-      --dataloader_prefetch_factor 6 \
+      --dataloader_num_workers ${num_workers} \
+      --dataloader_prefetch_factor ${prefetch} \
       --training_description "debug only" \
+      --training_seed "${seed}" \
       --training_model_name "llama" \
-      --training_model_config_path "config/debug.json" \
+      --training_model_config_path "${model_config}" \
       --training_print_args true \
-      --training_trace_dump_folder "exp/debug5_1B_1x16k_fullac_cp4tp1dp2_flex_packloss_reporttokenloss" \
+      --training_trace_dump_folder "exp/${exp_id}" \
       --training_fsdp_reshard_after_forward "default" \
-      --training_context_parallel_degree 4 \
+      --training_context_parallel_degree ${cp} \
       --training_context_parallel_rotate_method "allgather" \
-      --training_tensor_parallel_degree 1 \
+      --training_tensor_parallel_degree ${tp} \
       --training_enable_loss_parallel true \
-      --training_pipeline_parallel_degree 1 \
+      --training_pipeline_parallel_degree ${pp} \
       --training_pipeline_parallel_schedule "1F1B" \
       --training_enable_ckpt true \
       --training_ckpt_load_step -1 \
@@ -121,7 +154,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --training_enable_tensorboard true \
       --training_save_tb_folder "tensorboard" \
       --training_tb_rank_0_only true \
-      --training_mixed_precision_param "bfloat16" \
+      --training_mixed_precision_param "${param_dtype}" \
       --training_mixed_precision_reduce "float32" \
       --training_compile true \
       --training_enable_compiled_autograd false \

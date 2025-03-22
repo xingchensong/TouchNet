@@ -406,6 +406,7 @@ class MetricsProcessor:
 
         time_delta = time.perf_counter() - self.time_last_log
 
+        lr = self.lr_schedulers.schedulers[0].get_last_lr()[0]
         # tokens per second per device, abbreviated as tps
         tps = self.ntokens_since_last_log / (
             time_delta * self.parallel_dims.non_data_parallel_size
@@ -428,6 +429,7 @@ class MetricsProcessor:
             "loss_metrics/global_max_loss_per_token": global_max_loss_per_token,
             "loss_metrics/global_avg_grad_norm": global_avg_grad_norm,
             "loss_metrics/global_max_grad_norm": global_max_grad_norm,
+            "loss_metrics/learning_rate": lr,
             "throughput(tps)": tps,
             "tflops": tflops,
             "mfu(%)": mfu,
@@ -448,7 +450,8 @@ class MetricsProcessor:
             f"{color.red}step: {step:2}  "
             f"{color.green}loss (per sample): {global_avg_loss_per_sample:7.4f}  "
             f"{color.green}loss (per token): {global_avg_loss_per_token:7.4f}  "
-            f"{color.green}grad norm: {global_avg_grad_norm:7.4f}  "
+            f"{color.green}grad norm: {global_avg_grad_norm:5.2f}  "
+            f"{color.green}lr: {lr:.4f}  "
             f"{color.yellow}memory: {device_mem_stats.max_reserved_gib:5.2f}GiB"
             f"({device_mem_stats.max_reserved_pct:.2f}%)  "
             f"{color.blue}tps: {round(tps):,}  "

@@ -82,6 +82,14 @@ class TrainConfig:
             ),
         },
     )
+    training_model_pretrained_weight_dir: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "dir to model weight files (huggingface style *.bin or *.safetensors)."
+            ),
+        },
+    )
     # metrics/logging configs
     training_description: str = field(
         default="default job",

@@ -3,6 +3,8 @@ from typing import Tuple
 import torch
 from torch.distributed.tensor import DTensor, Replicate
 from transformers import AutoConfig, AutoModelForCausalLM
+from transformers.models.llama import LlamaForCausalLM
+from transformers.models.llama.modeling_llama import LlamaRMSNorm
 
 from touchnet.data.dataloader import build_dataloader
 from touchnet.models.llama.parallelize_llama import parallelize_llama
@@ -41,6 +43,22 @@ def cross_entropy_loss(
     return loss_per_sample, loss_per_token
 
 
+def post_init(model: LlamaForCausalLM, init_device: torch.device):
+    # NOTE(xcsong): Init rope and norm.weight
+    inv_freq, attention_scaling = model.model.rotary_emb.rope_init_fn(
+        model.model.rotary_emb.config, device=init_device)
+    model.model.rotary_emb.inv_freq = inv_freq
+    model.model.rotary_emb.attention_scaling = attention_scaling
+    model.model.rotary_emb.original_inv_freq = inv_freq
+    assert isinstance(model.model.norm, LlamaRMSNorm)
+    torch.nn.init.ones_(model.model.norm.weight)
+    for layer in model.model.layers:
+        assert isinstance(layer.input_layernorm, LlamaRMSNorm)
+        assert isinstance(layer.post_attention_layernorm, LlamaRMSNorm)
+        torch.nn.init.ones_(layer.input_layernorm.weight)
+        torch.nn.init.ones_(layer.post_attention_layernorm.weight)
+
+
 register_train_spec(
     TrainSpec(
         name="llama",
@@ -53,6 +71,7 @@ register_train_spec(
         build_dataloader_fn=build_dataloader,
         build_tokenizer_fn=build_tokenizer,
         loss_fn=cross_entropy_loss,
+        additional_post_init_fn=post_init,
         build_metrics_processor_fn=build_metrics_processor,
     )
 )

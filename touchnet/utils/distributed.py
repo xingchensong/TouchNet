@@ -156,8 +156,9 @@ class ParallelDims:
             mesh[tuple(dp_cp_mesh_dim_names)]._flatten(mesh_dim_name="dp_cp")
 
         logger.info(f"world_mesh: {mesh}")
-        for name in mesh.mesh_dim_names:
-            logger.info(f"[rank{dist.get_rank()}] world_mesh['{name}']: {mesh[name]}")
+        if mesh.mesh_dim_names:
+            for name in mesh.mesh_dim_names:
+                logger.info(f"[rank{dist.get_rank()}] world_mesh['{name}']: {mesh[name]}")
 
         return mesh
 
