@@ -11,6 +11,7 @@ from datetime import timedelta
 from typing import Any, Dict, Iterable, Optional
 
 import torch
+import torch.distributed.checkpoint as dcp
 from torch.distributed.device_mesh import DeviceMesh
 from torch.distributed.elastic.multiprocessing.errors import record
 from transformers.hf_argparser import HfArgumentParser
@@ -167,10 +168,38 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             f"{color.red}size (wo emb): {model_param_count_wo_emb:,}" +
             f" total parameters (wo emb) ({model_param_count_wo_emb/1000000000.0:4f} B){color.reset}"
         )
+        logger.info(model)
 
         # move sharded model to CPU/GPU and initialize weights via DTensor
         if job_config.training_create_seed_ckpt:
             init_device = "cpu"
+            assert (
+                world_size == 1
+            ), "Must create seed checkpoint using a single device, to disable sharding"
+            assert (
+                job_config.training_enable_ckpt
+            ), "Must enable checkpointing when creating a seed checkpoint"
+
+            model.to_empty(device=init_device)
+            if job_config.training_model_pretrained_weight_dir:
+                logger.info(f"Load pretrained weight from {job_config.training_model_pretrained_weight_dir}")
+                # TODO(xcsong): tie_word_emb=False? (this is required for pp)
+                with torch.no_grad():
+                    model = model.from_pretrained(job_config.training_model_pretrained_weight_dir,
+                                                  config=model_config)
+            else:
+                logger.info("Random initilize seed checkpoint.")
+                with torch.no_grad():
+                    model.post_init()
+                    self.train_spec.additional_post_init_fn(model, init_device)
+            folder = os.path.join(job_config.training_trace_dump_folder,
+                                  job_config.training_ckpt_folder,
+                                  "step-0")
+            os.makedirs(folder, exist_ok=True)
+            dcp.save({"model": model.state_dict()}, checkpoint_id=folder)
+            self.checkpointer = None
+            logger.info("Created seed checkpoint")
+            return
         elif job_config.training_enable_cpu_offload:
             init_device = "cpu"
         else:
@@ -215,12 +244,35 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             ensure_pp_loss_visible(self.parallel_dims, job_config, color)
 
         else:
-            # apply PT-D Tensor Parallel, activation checkpointing, torch.compile, Data Parallel
+            """
+            NOTE(xcsong): apply PT-D Tensor Parallel, activation checkpointing, torch.compile, Data Parallel
+            NOTE(xcsong): Before parallelizing the model, `model.lm_head` looks like:
+                tensor(..., device='meta', size=(vocab_size, hidden), dtype=torch.bfloat16, requires_grad=True)
+            """
             self.train_spec.parallelize_fn(model, self.world_mesh, self.parallel_dims, job_config)
+            """
+            NOTE(xcsong): Assume dp=2 cp=4, after parallelizing the model, `model.lm_head` looks like:
+                DTensor(local_tensor=tensor(..., device='meta', size=(vocab_size // dp // cp, hidden),
+                                            dtype=torch.bfloat16),
+                        device_mesh=DeviceMesh('cuda', [0, 1, 2, 3, 4, 5, 6, 7],
+                        mesh_dim_names=('dp_shard_cp',)),
+                        placements=(Shard(dim=0),))
+            NOTE(xcsong): Assume dp=2, cp=2, tp=2, after parallelizing the model, `model.lm_head` looks like:
+                DTensor(local_tensor=tensor(..., device='meta', size=(vocab_size // dp // cp // tp, hidden),
+                                            dtype=torch.bfloat16),
+                        device_mesh=DeviceMesh('cuda', [[0, 1], [2, 3], [4, 5], [6, 7]],
+                        mesh_dim_names=('dp_shard_cp', 'tp')),
+                        placements=(_StridedShard(dim=0, sf=2), Shard(dim=0)))
+            """
             model.to_empty(device=init_device)
+            """
+            NOTE(xcsong): to_empty() will allocate real memories on init_device for all meta-tensors,
+                Without post_init(), the values of these tensors are undefined, and there may be NaNs.
+                We also need to pay attention to the correct initialization of non-persistent buffers (such as rope).
+            """
             with torch.no_grad():
                 model.post_init()
-                # TODO(xcsong): load weight from hf? currently only support random init
+                self.train_spec.additional_post_init_fn(model, init_device)
             model.train()
 
             self.model_parts = [model]
@@ -251,17 +303,6 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             states={"train_state": self},
             job_config=job_config,
         )
-
-        if job_config.training_create_seed_ckpt:
-            assert (
-                world_size == 1
-            ), "Must create seed checkpoint using a single device, to disable sharding"
-            assert (
-                job_config.training_enable_ckpt
-            ), "Must enable checkpointing when creating a seed checkpoint"
-            self.checkpointer.save(curr_step=0, force=True)
-            logger.info("Created seed checkpoint")
-            return
 
         self.checkpointer.load(step=job_config.training_ckpt_load_step)
 
@@ -301,7 +342,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         )
 
         """
-        TODO: We need to carefully handle the position_ids for TP/CP
+        NOTE(flame): We need to carefully handle the position_ids for TP/CP
         Depending on the Models'PE, the position_ids might be different.
 
         e.g. for TP
@@ -515,7 +556,8 @@ if __name__ == "__main__":
 
     try:
         trainer = Trainer(tok_conf, data_conf, train_conf)
-        trainer.train()
+        if not train_conf.training_create_seed_ckpt:
+            trainer.train()
     finally:
         if trainer:
             trainer.close()

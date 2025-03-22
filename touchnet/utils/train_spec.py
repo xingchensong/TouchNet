@@ -44,6 +44,7 @@ class TrainSpec:
     build_dataloader_fn: DataLoaderBuilder
     build_tokenizer_fn: TokenizerBuilder
     loss_fn: LossFunction
+    additional_post_init_fn: Callable[[nn.Module, torch.device], None]
     build_metrics_processor_fn: Optional[MetricsProcessorBuilder] = None
 
 
