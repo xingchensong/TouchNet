@@ -464,6 +464,22 @@ class MetricsProcessor:
         self.time_last_log = time.perf_counter()
         self.device_memory_monitor.reset_peak_stats()
 
+    def log_dev(self, step: int, global_avg_loss_per_sample: float,
+                global_avg_loss_per_token: float, global_max_loss_per_token: float):
+        metrics = {
+            "loss_metrics/dev_global_avg_loss_per_sample": global_avg_loss_per_sample,
+            "loss_metrics/dev_global_avg_loss_per_token": global_avg_loss_per_token,
+            "loss_metrics/dev_global_max_loss_per_token": global_max_loss_per_token,
+        }
+        self.logger.log(metrics, step)
+
+        color = self.color
+        logger.info(
+            f"{color.red}dev-step: {step:2}  "
+            f"{color.green}loss (per sample): {global_avg_loss_per_sample:7.4f}  "
+            f"{color.green}loss (per token): {global_avg_loss_per_token:7.4f}{color.reset}"
+        )
+
     def close(self):
         self.logger.close()
 
