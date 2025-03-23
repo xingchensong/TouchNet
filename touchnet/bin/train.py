@@ -594,9 +594,9 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
 
         self.metrics_processor.log_dev(
             step=self.step,
-            global_avg_loss_per_sample=sum([l[0] for l in losses]) / len(losses),
-            global_avg_loss_per_token=sum([l[1] for l in losses]) / len(losses),
-            global_max_loss_per_token=max([l[2] for l in losses]),
+            global_avg_loss_per_sample=sum([loss_tuple[0] for loss_tuple in losses]) / len(losses),
+            global_avg_loss_per_token=sum([loss_tuple[1] for loss_tuple in losses]) / len(losses),
+            global_max_loss_per_token=max([loss_tuple[2] for loss_tuple in losses]),
         )
 
         if torch.distributed.get_rank() == 0:
