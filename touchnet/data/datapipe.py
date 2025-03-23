@@ -83,7 +83,7 @@ class TouchDatapipe(IterableDataset, Stateful):
             # 2nd shuffle on samples
             num_samples = len(_dataset)
             g = torch.Generator()
-            g.manual_seed(self.epoch)
+            g.manual_seed(self.epoch + self.consumed_lists)
             if self.config.dataset_shuffling:
                 sample_idxs = torch.randperm(num_samples, generator=g).tolist()
             else:
