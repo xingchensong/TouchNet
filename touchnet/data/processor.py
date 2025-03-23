@@ -435,5 +435,7 @@ def batch_text(data, config: DataConfig, tokenizer: BaseTokenizer):
         buffer["num_sentence"] += 1
         cur_text_idx += text_len
         cur_sentence_idx += 1
-    if cur_batch_idx > 0:
+    if cur_text_idx > 0 or cur_batch_idx > 0:
         yield buffer
+    else:
+        yield None

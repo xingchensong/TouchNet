@@ -48,6 +48,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
     world_mesh: DeviceMesh
 
     dataloader: BaseDataLoader
+    dataloader_dev: BaseDataLoader
     metrics_processor: MetricsProcessor
     checkpointer: CheckpointManager
 
@@ -121,6 +122,14 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             data_config=data_config,
             dp_rank=dp_rank,
             dp_world_size=dp_world_size,
+            split='train',
+        )
+        self.dataloader_dev = self.train_spec.build_dataloader_fn(
+            tokenizer_config=tokenizer_config,
+            data_config=data_config,
+            dp_rank=dp_rank,
+            dp_world_size=dp_world_size,
+            split='dev',
         )
 
         # build model (using meta init)
@@ -323,9 +332,12 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             f"(warmup {job_config.lr_scheduler_warmup_steps})"
         )
 
-    def next_batch(self, data_iterator: Iterable) -> Dict[str, Any]:
-        data_load_start = time.perf_counter()
+    def next_batch(self, data_iterator: Iterable, perf: bool = True) -> Dict[str, Any]:
+        if perf:
+            data_load_start = time.perf_counter()
         batch = next(data_iterator)
+        if not batch:
+            return None
         labels, position_ids = batch["labels"], batch["position_ids"]
         inputs_embeds = batch["inputs_embeds"]
         input_ids = batch["input_ids"]
@@ -336,10 +348,11 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             # NOTE(xcsong): we use global-batch, so we need to sum num_sentence
             num_sentence = torch.tensor(num_sentence, dtype=torch.int64).to(device_type)
             num_sentence = dist_sum(num_sentence, mesh=self.world_mesh["dp"])
-        self.metrics_processor.ntokens_since_last_log += labels.numel()
-        self.metrics_processor.data_loading_times.append(
-            time.perf_counter() - data_load_start
-        )
+        if perf:
+            self.metrics_processor.ntokens_since_last_log += labels.numel()
+            self.metrics_processor.data_loading_times.append(
+                time.perf_counter() - data_load_start
+            )
 
         """
         NOTE(flame): We need to carefully handle the position_ids for TP/CP
@@ -357,24 +370,6 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         position_ids = position_ids.to(device_type)
         sentence_ids = sentence_ids.to(device_type)
         sentence_lens = sentence_lens.to(device_type)
-        return {
-            "input_ids": input_ids,          # [bs, seq_len]
-            "inputs_embeds": inputs_embeds,  # [bs, seq_len, dim]
-            "sentence_ids": sentence_ids,    # [bs, seq_len]
-            "sentence_lens": sentence_lens,  # [bs, seq_len]
-            "labels": labels,                # [bs, seq_len]
-            "position_ids": position_ids,    # [bs, seq_len]
-            "num_sentence": num_sentence,    # [1,]
-        }
-
-    def train_step(self, data: Dict[str, Any]):
-        labels = data["labels"]
-        position_ids = data["position_ids"]
-        sentence_ids = data["sentence_ids"]
-        sentence_lens = data["sentence_lens"]
-        num_sentence = data["num_sentence"]
-        input_ids = data["input_ids"]
-        inputs_embeds = data["inputs_embeds"]
 
         cp_buffers = [labels, position_ids, sentence_ids, sentence_lens]
         cp_no_restore_buffers = [labels, position_ids, sentence_ids, sentence_lens]
@@ -390,8 +385,6 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             cp_no_restore_buffers.append(input_ids)
             cp_seq_dims.append(1)
 
-        self.optimizers.zero_grad()
-
         # apply context parallelism if cp is enabled
         # ensure CP handles the separate freqs_cis buffer for each pp stage
         optional_context_parallel_ctx = (
@@ -406,26 +399,40 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             else None
         )
 
+        return {
+            "input_ids": input_ids,          # [bs, seq_len]
+            "inputs_embeds": inputs_embeds,  # [bs, seq_len, dim]
+            "sentence_ids": sentence_ids,    # [bs, seq_len]
+            "sentence_lens": sentence_lens,  # [bs, seq_len]
+            "labels": labels,                # [bs, seq_len]
+            "position_ids": position_ids,    # [bs, seq_len]
+            "num_sentence": num_sentence,    # [1,]
+            "optional_context_parallel_ctx": optional_context_parallel_ctx,
+        }
+
+    def train_step(self, data: Dict[str, Any]):
+        self.optimizers.zero_grad()
+
         if self.parallel_dims.pp_enabled:
             # TODO(xcsong): we should distribute the position_ids as well with CP,
             #   currently we just disable CP if PP is enabled.
             assert not self.parallel_dims.cp_enabled, "CP is not supported with PP"
             # Pipeline Parallel forward / backward inside step() call
-            with self.train_context(optional_context_parallel_ctx):
-                targets, losses = (labels, []) if self.pp_has_last_stage else (None, None)
+            with self.train_context(data["optional_context_parallel_ctx"]):
+                targets, losses = (data["labels"], []) if self.pp_has_last_stage else (None, None)
                 if self.pp_has_first_stage:
-                    assert inputs_embeds is None, "TODO(xcsong): PP supports inputs_embeds"
+                    assert data["inputs_embeds"] is None, "TODO(xcsong): PP supports inputs_embeds"
                     self.pp_schedule.step(
-                        input_ids,
-                        position_ids=position_ids,
-                        attention_mask=sentence_ids if self.use_flex_attention else None,
+                        data["input_ids"],
+                        position_ids=data["position_ids"],
+                        attention_mask=data["sentence_ids"] if self.use_flex_attention else None,
                         target=targets,
                         losses=losses
                     )
                 else:
                     self.pp_schedule.step(
-                        position_ids=position_ids,
-                        attention_mask=sentence_ids if self.use_flex_attention else None,
+                        position_ids=data["position_ids"],
+                        attention_mask=data["sentence_ids"] if self.use_flex_attention else None,
                         target=targets,
                         losses=losses
                     )
@@ -440,17 +447,17 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             )
         else:
             # Non-PP forward / backward
-            with self.train_context(optional_context_parallel_ctx):
+            with self.train_context(data["optional_context_parallel_ctx"]):
                 assert len(self.model_parts) == 1
                 pred = self.model_parts[0](
-                    input_ids=input_ids,
-                    inputs_embeds=inputs_embeds,
-                    position_ids=position_ids,
-                    attention_mask=sentence_ids if self.use_flex_attention else None,
+                    input_ids=data["input_ids"],
+                    inputs_embeds=data["inputs_embeds"],
+                    position_ids=data["position_ids"],
+                    attention_mask=data["sentence_ids"] if self.use_flex_attention else None,
                 )
                 # logits.shape = pred[0].shape = (bs, seq_len // cp, vocab_size // tp)
                 loss_per_sample, loss_per_token = self.train_spec.loss_fn(
-                    pred, labels, sentence_lens, num_sentence)  # (1,), (1,)
+                    pred, data["labels"], data["sentence_lens"], data["num_sentence"])  # (1,), (1,)
                 # need to free to before bwd to avoid peaking memory
                 del pred
                 loss_per_sample.backward()
@@ -510,6 +517,8 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                 self.gc_handler.run(self.step)
 
                 data = self.next_batch(data_iterator)
+                if not data:
+                    break
                 self.train_step(data)
 
                 self.checkpointer.save(
@@ -521,6 +530,9 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                     torch_profiler.step()
                 if memory_profiler:
                     memory_profiler.step()
+
+                if self.checkpointer._should_save(self.step):
+                    self.dev()
 
                 # reduce timeout after first train step for faster signal
                 # (assuming lazy init and compilation are finished)
@@ -536,6 +548,64 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
 
         self.metrics_processor.close()
         logger.info("Training completed")
+
+    @torch.no_grad
+    def dev_step(self, data: Dict[str, Any]):
+        if self.parallel_dims.pp_enabled:
+            raise NotImplementedError("TODO(xcsong): support PP.")
+        else:
+            # Non-PP forward
+            with self.train_context(data["optional_context_parallel_ctx"]):
+                assert len(self.model_parts) == 1
+                pred = self.model_parts[0](
+                    input_ids=data["input_ids"],
+                    inputs_embeds=data["inputs_embeds"],
+                    position_ids=data["position_ids"],
+                    attention_mask=data["sentence_ids"] if self.use_flex_attention else None,
+                )
+                # logits.shape = pred[0].shape = (bs, seq_len // cp, vocab_size // tp)
+                loss_per_sample, loss_per_token = self.train_spec.loss_fn(
+                    pred, data["labels"], data["sentence_lens"], data["num_sentence"])  # (1,), (1,)
+                # need to free to before bwd to avoid peaking memory
+                del pred
+                loss_per_sample = loss_per_sample.detach()
+                loss_per_token = loss_per_token.detach()
+                global_avg_loss_per_sample = dist_sum(loss_per_sample, self.world_mesh["dp_cp"])
+                global_avg_loss_per_token, global_max_loss_per_token = (
+                    dist_mean(loss_per_token, self.world_mesh["dp_cp"]),
+                    dist_max(loss_per_token, self.world_mesh["dp_cp"]),
+                )
+
+        return (global_avg_loss_per_sample, global_avg_loss_per_token, global_max_loss_per_token)
+
+    @record
+    @torch.no_grad
+    def dev(self):
+        for model in self.model_parts:
+            model.eval()
+
+        losses = []
+        data_iterator = iter(self.dataloader_dev)
+
+        data = self.next_batch(data_iterator, perf=False)
+        while data:
+            losses.append(self.dev_step(data))
+            data = self.next_batch(data_iterator, perf=False)
+
+        self.metrics_processor.log_dev(
+            step=self.step,
+            global_avg_loss_per_sample=sum([l[0] for l in losses]) / len(losses),
+            global_avg_loss_per_token=sum([l[1] for l in losses]) / len(losses),
+            global_max_loss_per_token=max([l[2] for l in losses]),
+        )
+
+        if torch.distributed.get_rank() == 0:
+            logger.info("Sleeping 2 seconds for other ranks to complete")
+            time.sleep(2)
+
+        for model in self.model_parts:
+            model.train()
+        logger.info("Dev completed")
 
     def state_dict(self) -> dict[str, Any]:
         return {"step": self.step}

@@ -21,6 +21,32 @@ class DataConfig:
             )
         },
     )
+    datalist_dev_path: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "list of dataset, each line is a prefix path to a `TouchDataset`. "
+                "e.g. `head -2 /mnt/data/data.list`\n"
+                "```\n"
+                "/mnt/data/aishell1\n"
+                "/mnt/data/aishell2\n"
+                "```\n"
+            )
+        },
+    )
+    datalist_test_path: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "list of dataset, each line is a prefix path to a `TouchDataset`. "
+                "e.g. `head -2 /mnt/data/data.list`\n"
+                "```\n"
+                "/mnt/data/aishell1\n"
+                "/mnt/data/aishell2\n"
+                "```\n"
+            )
+        },
+    )
     datalist_sharding: bool = field(
         default=True,
         metadata={

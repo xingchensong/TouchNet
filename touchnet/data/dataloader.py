@@ -4,9 +4,10 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import copy
 import pickle
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Literal
 
 from torch.distributed.checkpoint.stateful import Stateful
 from torch.utils.data import IterableDataset
@@ -96,7 +97,29 @@ class ParallelAwareDataloader(StatefulDataLoader, BaseDataLoader):
 
 
 def build_dataloader(data_config: DataConfig, tokenizer_config: TokenizerConfig,
-                     dp_rank: int, dp_world_size: int):
+                     dp_rank: int, dp_world_size: int,
+                     split: Literal['train', 'dev', 'test']) -> BaseDataLoader:
+    """Builds a dataloader."""
+    data_config = copy.deepcopy(data_config)
+
+    if split != 'train':
+        data_config.datalist_shuffling = False
+        data_config.dataset_shuffling = False
+        data_config.audio_speed_perturb = False
+        data_config.audiofeat_spec_aug = False
+        data_config.audiofeat_spec_sub = False
+        data_config.audiofeat_spec_trim = False
+        data_config.audiofeat_dither = 0.0
+        if split == 'dev':
+            data_config.datalist_sharding = False
+            data_config.datalist_path = data_config.datalist_dev_path
+            # NOTE(xcsong): Fix batch size for fair comprasion between different training setups
+            data_config.dataset_batchsize = 1
+            data_config.dataset_audio_seqlen = 4096
+            data_config.dataset_text_seqlen = 4096
+        elif split == 'test':
+            data_config.datalist_path = data_config.datalist_test_path
+
     # TODO(xcsong): support more datapipe?
     datapipe = texttoken_datapipe(data_config, tokenizer_config,
                                   dp_rank, dp_world_size)

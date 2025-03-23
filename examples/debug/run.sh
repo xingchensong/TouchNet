@@ -41,7 +41,7 @@ param_dtype="bfloat16"
 
 seed=2025
 model_config=config/debug.json
-exp_id="debug5_1B_1x16384_fullac_cp2_tp2_dp2_pp1_flex_packloss_tieemb_fromscratch_fixROPEbug"
+exp_id="debug5_1B_1x16384_fullac_cp2_tp2_dp2_pp1_flex_packloss_tieemb_fromscratch_fixROPEbug_dev"
 cp=$(echo $exp_id | grep -oP 'cp\d+' | grep -oP '\d+')
 tp=$(echo $exp_id | grep -oP 'tp\d+' | grep -oP '\d+')
 dp=$(echo $exp_id | grep -oP 'dp\d+' | grep -oP '\d+')
@@ -123,6 +123,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --tokenizer_model "/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct" \
       --tokenizer_type "HuggingFaceTokenizer" \
       --datalist_path "data/${train_set}/data.list" \
+      --datalist_dev_path "data/${dev_set}/data.list" \
       --datalist_sharding true \
       --datalist_shuffling true \
       --dataset_shuffling true \
