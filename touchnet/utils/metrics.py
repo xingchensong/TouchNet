@@ -381,7 +381,7 @@ class MetricsProcessor:
     def should_log(self, step: int) -> bool:
         return step == 1 or step % self.job_config.training_log_freq == 0
 
-    def log(self, step: int, global_avg_loss_per_sample: float,
+    def log(self, epoch: int, step: int, global_avg_loss_per_sample: float,
             global_avg_loss_per_token: float, global_max_loss_per_token: float,
             global_avg_grad_norm: float, global_max_grad_norm: float):
         assert self.num_flop_per_token > 0, "num_flop_per_token must be set"
@@ -429,7 +429,7 @@ class MetricsProcessor:
 
         color = self.color
         logger.info(
-            f"{color.red}step: {step:2}  "
+            f"{color.red}epoch: {epoch:2} step: {step:2}  "
             f"{color.green}loss (per sample): {global_avg_loss_per_sample:7.4f}  "
             f"{color.green}loss (per token): {global_avg_loss_per_token:7.4f}  "
             f"{color.green}grad norm: {global_avg_grad_norm:5.2f}  "
@@ -446,7 +446,7 @@ class MetricsProcessor:
         self.time_last_log = time.perf_counter()
         self.device_memory_monitor.reset_peak_stats()
 
-    def log_dev(self, step: int, global_avg_loss_per_sample: float,
+    def log_dev(self, epoch: int, step: int, global_avg_loss_per_sample: float,
                 global_avg_loss_per_token: float, global_max_loss_per_token: float):
         metrics = {
             "loss_metrics/dev_global_avg_loss_per_sample": global_avg_loss_per_sample,
@@ -457,7 +457,7 @@ class MetricsProcessor:
 
         color = self.color
         logger.info(
-            f"{color.red}dev-step: {step:2}  "
+            f"{color.red}epoch: {epoch:2} dev-step: {step:2}  "
             f"{color.green}loss (per sample): {global_avg_loss_per_sample:7.4f}  "
             f"{color.green}loss (per token): {global_avg_loss_per_token:7.4f}{color.reset}"
         )
