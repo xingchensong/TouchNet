@@ -41,7 +41,7 @@ param_dtype="bfloat16"
 
 seed=2025
 model_config=config/debug.json
-exp_id="debug5_1B_1x16384_fullac_cp2_tp2_dp2_pp1_flex_packloss_tieemb_fromscratch_fixROPEbug_dev"
+exp_id="debug5_1B_1x16384_fullac_cp2_tp2_dp2_pp1_flex_packloss_tieemb_fromscratch_fixROPEbug_dev_rerun"
 cp=$(echo $exp_id | grep -oP 'cp\d+' | grep -oP '\d+')
 tp=$(echo $exp_id | grep -oP 'tp\d+' | grep -oP '\d+')
 dp=$(echo $exp_id | grep -oP 'dp\d+' | grep -oP '\d+')
@@ -58,22 +58,6 @@ prefetch=6
 
 . ./parse_options.sh || exit 1;
 
-if [[ $exp_id == *"fromseed"* ]]; then
-  training_model_pretrained_weight_dir=""
-  stage=1
-  stop_stage=2
-fi
-
-if [[ $exp_id == *"fromscratch"* ]]; then
-  stage=2
-  stop_stage=2
-fi
-
-if [[ $exp_id == *"frompretrain"* ]]; then
-  stage=1
-  stop_stage=2
-fi
-
 if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
   for x in ${train_set} ${dev_set} ${test_sets}; do
     if [ ! -d "data/${x}/data.list" ]; then
@@ -89,6 +73,22 @@ if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
           --datatypes 'texttoken'
     fi
   done
+fi
+
+if [[ $exp_id == *"fromseed"* ]]; then
+  training_model_pretrained_weight_dir=""
+  stage=1
+  stop_stage=2
+fi
+
+if [[ $exp_id == *"fromscratch"* ]]; then
+  stage=2
+  stop_stage=2
+fi
+
+if [[ $exp_id == *"frompretrain"* ]]; then
+  stage=1
+  stop_stage=2
 fi
 
 if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then

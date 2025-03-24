@@ -105,9 +105,6 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         else:
             dp_world_size, dp_rank = 1, 0
 
-        if self.parallel_dims.pp_enabled:
-            pp_mesh = self.world_mesh["pp"]
-
         # Set random seed, and maybe enable deterministic mode (mainly for debugging, expect perf loss)
         set_determinism(
             self.world_mesh, self.device,
@@ -216,10 +213,16 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
 
         # apply parallelisms and initialization
         if self.parallel_dims.pp_enabled:
-            raise NotImplementedError("TODO(xcsong): Pipeline Parallel with pack loss")
             assert not model_config.tie_word_embeddings, "TODO(xcsong): PP supports tied embeddings"
-            # apply PT-D Pipeline Parallel
             job_config.training_batchsize = data_config.dataset_batchsize
+
+            if not self.train_spec.pipelining_fn:
+                raise RuntimeError(
+                    f"Pipeline Parallel is enabled but {self.train_spec.name} "
+                    f"does not support pipelining"
+                )
+
+            # apply both PT-D Pipeline Parallel and SPMD-style PT-D techniques
             (
                 self.pp_schedule,
                 self.model_parts,
@@ -227,38 +230,35 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                 self.pp_has_last_stage,
             ) = self.train_spec.pipelining_fn(
                 model,
-                pp_mesh,
+                self.world_mesh,
                 self.parallel_dims,
                 job_config,
                 self.device,
                 model_config,
+                self.train_spec.parallelize_fn,
                 self.train_spec.loss_fn,
             )
             # when PP is enabled, `model` obj is no longer used after this point, model_parts is used instead
             del model
 
-            # For PP with looped schedules, each item in model_parts is one stage-model-chunk.
-            # We need to iterate through model_parts to apply SPMD parallelisms, compilation,
-            # optimizer, and checkpointing
             for m in self.model_parts:
-                # apply SPMD-style PT-D techniques
-                self.train_spec.parallelize_fn(m, self.world_mesh, self.parallel_dims, job_config)
                 m.to_empty(device=init_device)
                 with torch.no_grad():
                     m.post_init()
-                    # TODO(xcsong): load weight from hf? currently only support random init
+                    self.train_spec.additional_post_init_fn(m, init_device)
                 m.train()
 
             # confirm that user will be able to view loss metrics on the console
             ensure_pp_loss_visible(self.parallel_dims, job_config, color)
-
         else:
             """
             NOTE(xcsong): apply PT-D Tensor Parallel, activation checkpointing, torch.compile, Data Parallel
             NOTE(xcsong): Before parallelizing the model, `model.lm_head` looks like:
                 tensor(..., device='meta', size=(vocab_size, hidden), dtype=torch.bfloat16, requires_grad=True)
             """
-            self.train_spec.parallelize_fn(model, self.world_mesh, self.parallel_dims, job_config)
+            model = self.train_spec.parallelize_fn(
+                model, self.world_mesh, self.parallel_dims, job_config
+            )
             """
             NOTE(xcsong): Assume dp=2 cp=4, after parallelizing the model, `model.lm_head` looks like:
                 DTensor(local_tensor=tensor(..., device='meta', size=(vocab_size // dp // cp, hidden),

@@ -29,7 +29,7 @@ def parallelize_llama(
     world_mesh: DeviceMesh,
     parallel_dims: ParallelDims,
     job_config: TrainConfig,
-):
+) -> torch.nn.Module:
     """
     Apply tensor parallelism, activation checkpointing, torch.compile, and data
     parallelism to the model.
@@ -96,6 +96,8 @@ def parallelize_llama(
             enable_compile=job_config.training_compile,
             enable_compiled_autograd=job_config.training_enable_compiled_autograd,
         )
+
+    return model
 
 
 def apply_tp(
