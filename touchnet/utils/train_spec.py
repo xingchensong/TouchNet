@@ -45,6 +45,7 @@ class TrainSpec:
     build_tokenizer_fn: TokenizerBuilder
     loss_fn: LossFunction
     additional_post_init_fn: Callable[[nn.Module, torch.device], None]
+    get_num_flop_per_token_fn: Callable[[int, AutoConfig, int], int]
     build_metrics_processor_fn: Optional[MetricsProcessorBuilder] = None
 
 
