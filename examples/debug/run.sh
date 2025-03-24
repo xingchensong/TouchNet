@@ -1,4 +1,9 @@
-. ./path.sh || exit 1
+# NOTE(xcsong): change xx_prefix and xx_version to ur setup
+cache_prefix=/bucket/output/jfs-hdfs/user/xingchen.song/share
+cuda_prefix=/bucket/output/jfs-hdfs/user/xingchen.song/tools/cuda
+cuda_version=12.6.3
+driver_version=560.35.05
+cudnn_version=9.5.1.17
 
 # Automatically detect number of gpus
 if command -v nvidia-smi &> /dev/null; then
@@ -11,17 +16,7 @@ fi
 # You can also manually specify CUDA_VISIBLE_DEVICES
 # if you don't want to utilize all available GPU resources.
 export CUDA_VISIBLE_DEVICES="${gpu_list}"
-echo "CUDA_VISIBLE_DEVICES is ${CUDA_VISIBLE_DEVICES}"
-
-cuda_visible_devices=${CUDA_VISIBLE_DEVICES:-""}
-if [ -z "$cuda_visible_devices" ]; then
-  echo "CUDA_VISIBLE_DEVICES is not set. Using default device_ids."
-  device_ids=(0 1 2 3 4 5 6 7)
-else
-  IFS=',' read -r -a device_ids <<< "$cuda_visible_devices"
-  echo "Using CUDA_VISIBLE_DEVICES: $cuda_visible_devices"
-fi
-echo "Parsed device_ids: ${device_ids[@]}"
+echo "$0: CUDA_VISIBLE_DEVICES is ${CUDA_VISIBLE_DEVICES}"
 
 stage=1
 stop_stage=2
@@ -33,22 +28,25 @@ num_nodes=1
 
 job_id=2026
 
-train_set=wikitext-2-v1.train.repeat10000
-dev_set=wikitext-2-v1.validation
-test_sets=wikitext-2-v1.test
+hf_data_repo="Salesforce/wikitext"
+hf_data_name="wikitext-103-v1"
+
+train_set=train
+dev_set=validation
+test_sets=test
 
 param_dtype="bfloat16"
 
 seed=2025
 model_config=config/debug.json
-exp_id="debug5_1B_1x16384_fullac_cp2_tp2_dp2_pp1_flex_packloss_tieemb_fromscratch_fixROPEbug_dev_rerun"
+exp_id="debug5_1B_1x16384_fullac_cp2_tp2_dp2_pp1_flex_packloss_tieemb_fromscratch_fixROPEbug_dev_wiki0.1B"
 cp=$(echo $exp_id | grep -oP 'cp\d+' | grep -oP '\d+')
 tp=$(echo $exp_id | grep -oP 'tp\d+' | grep -oP '\d+')
 dp=$(echo $exp_id | grep -oP 'dp\d+' | grep -oP '\d+')
 pp=$(echo $exp_id | grep -oP 'pp\d+' | grep -oP '\d+')
 bs=$(echo $exp_id | grep -oP '\d+x\d+' | grep -oP '\d+' | head -n 1)
 max_seq_len=$(echo $exp_id | grep -oP '\d+x\d+' | grep -oP '\d+' | tail -n 1)
-echo "${exp_id}: cp=${cp}, tp=${tp}, dp=${dp}, pp=${pp}, bs=${bs}, max_seq_len=${max_seq_len}"
+echo "$0: ${exp_id}: cp=${cp}, tp=${tp}, dp=${dp}, pp=${pp}, bs=${bs}, max_seq_len=${max_seq_len}"
 
 training_model_pretrained_weight_dir="/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct"
 
@@ -57,6 +55,16 @@ num_workers=6
 prefetch=6
 
 . ./parse_options.sh || exit 1;
+. ./path.sh --cache_prefix ${cache_prefix} \
+            --cuda_prefix ${cuda_prefix} \
+            --cuda_version ${cuda_version} \
+            --driver_version ${driver_version} \
+            --cudnn_version ${cudnn_version} || exit 1
+
+if [ ${stage} -le -1 ] && [ ${stop_stage} -ge -1 ]; then
+  echo "$0: stage -1: Data Download"
+  python download_wikitext.py
+fi
 
 if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
   for x in ${train_set} ${dev_set} ${test_sets}; do
@@ -65,7 +73,7 @@ if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
       mkdir -p data/${x}
       python touchnet/bin/make_data.py \
           --save_dir "data/${x}" \
-          --jsonl_path /bucket/output/jfs-hdfs/user/xingchen.song/share/huggingface/datasets/converted_jsonl_xcsong/${x}.jsonl \
+          --jsonl_path ${HF_HOME}/datasets/converted_jsonl_for_touchnet/${hf_data_repo}/${hf_data_name}/${x}.jsonl \
           --tokenizer_model "/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct" \
           --tokenizer_type "HuggingFaceTokenizer" \
           --num_utt_per_shard 2000 \
@@ -92,7 +100,7 @@ if [[ $exp_id == *"frompretrain"* ]]; then
 fi
 
 if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
-  echo "$0: create seed checkpoint for offline initialization"
+  echo "$0: Stage 1: create seed checkpoint for offline initialization"
   rm -rf "exp/${exp_id}"
   mkdir -p "exp/${exp_id}"
   torchrun --nnodes=1 --nproc_per_node=1 \
@@ -112,7 +120,7 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
 fi
 
 if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
-  echo "$0: start training"
+  echo "$0: Stage 2: start training"
   echo "$0: num_nodes is $num_nodes, proc_per_node is $num_gpus"
   # export TORCH_LOGS="+dynamo"
   # export TORCHDYNAMO_VERBOSE=1
