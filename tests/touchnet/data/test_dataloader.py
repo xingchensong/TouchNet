@@ -92,10 +92,9 @@ def test_dataloader(nnodes, nproc_per_node, max_epoch, num_workers, dp_rank, dp_
             prefetch_factor=4 if num_workers > 0 else None,
         )
         print(state_dict)
-        import pickle
         for k in state_dict:
             if "dp_rank" in k:
-                print(pickle.loads(state_dict[k]))
+                print(state_dict[k])
         dataloader.load_state_dict(state_dict)
 
         for i, data in enumerate(dataloader):
