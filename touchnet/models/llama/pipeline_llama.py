@@ -192,11 +192,12 @@ def patch_llamaforcasuallm_forward(model: nn.Module):
 
 def pipeline_llama(
     model: nn.Module,
-    pp_mesh: DeviceMesh,
+    world_mesh: DeviceMesh,
     parallel_dims: ParallelDims,
     job_config: TrainConfig,
     device: DeviceType,
     model_config: PretrainedConfig,
+    parallelize_fn: Callable[[nn.Module], nn.Module],
     loss_fn: Callable[..., torch.Tensor],
 ) -> tuple[_PipelineSchedule, list[nn.Module], bool, bool]:
     # NOTE(xcsong): Why do we have to change model.model.layers to nn.ModuleDict?
@@ -209,9 +210,21 @@ def pipeline_llama(
         "Patching Llama forward method for pipeline parallelism, it will disable some features of orignal HF model"
     )
     patch_llamaforcasuallm_forward(model)
-    stages, models = pipeline_llama_manual_split(
+    pp_mesh = world_mesh["pp"]
+    stages, model_parts = pipeline_llama_manual_split(
         model, pp_mesh, parallel_dims, job_config, device, model_config
     )
+
+    # For PP with looped schedules, each item in model_parts is one stage-model-chunk.
+    # We need to iterate through model_parts to apply SPMD parallelisms, compilation,
+    # optimizer, and checkpointing
+    for i, m in enumerate(model_parts):
+        # apply SPMD-style PT-D techniques
+        m = parallelize_fn(m, world_mesh, parallel_dims, job_config)
+        model_parts[i] = m
+        # NOTE: this is to update the model in the stage
+        #       in case the model is modified e.g. by torch.compile
+        stages[i].submod = m
 
     pp_schedule = build_pipeline_schedule(job_config, stages, loss_fn)
 
@@ -224,7 +237,7 @@ def pipeline_llama(
         if stage.is_last:
             has_last_stage = True
 
-    return pp_schedule, models, has_first_stage, has_last_stage
+    return pp_schedule, model_parts, has_first_stage, has_last_stage
 
 
 def pipeline_llama_manual_split(
