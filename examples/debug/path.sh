@@ -1,10 +1,14 @@
 # cuda related
 unset LD_LIBRARY_PATH
-prefix=/bucket/output/jfs-hdfs/user/xingchen.song/tools/cuda
+cuda_prefix=/bucket/output/jfs-hdfs/user/xingchen.song/tools/cuda
+cache_prefix=/bucket/output/jfs-hdfs/user/xingchen.song/share
 cuda_version=12.6.3
 driver_version=560.35.05
 cudnn_version=9.5.1.17
-export CUDA_HOME=${prefix}/cuda-${cuda_version}_cudnn-${cudnn_version}
+
+. ./parse_options.sh || exit 1;
+
+export CUDA_HOME=${cuda_prefix}/cuda-${cuda_version}_cudnn-${cudnn_version}
 export PATH=$CUDA_HOME/bin:$PATH
 export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$CUDA_HOME/lib64/stubs:/usr/lib:/usr/lib64:$LD_LIBRARY_PATH
 export LD_LIBRARY_PATH=$CUDA_HOME/extras/CUPTI/lib64:$LD_LIBRARY_PATH
@@ -35,9 +39,16 @@ export PYTHONPATH=../../:$PYTHONPATH
 # torch related
 export TORCH_NCCL_AVOID_RECORD_STREAMS=1  # see https://github.com/pytorch/torchtitan/blob/main/docs/composability.md#setting-torch_nccl_avoid_record_streams1-for-tp
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-export XDG_CACHE_HOME=/bucket/output/jfs-hdfs/user/xingchen.song/share/cache/xdg
+export XDG_CACHE_HOME=${cache_prefix}/xdg
 
 # huggingface related
-export HF_HOME=/bucket/output/jfs-hdfs/user/xingchen.song/share/huggingface
-export NUMBA_CACHE_DIR=/bucket/output/jfs-hdfs/user/xingchen.song/share/cache
-export MPLCONFIGDIR=/bucket/output/jfs-hdfs/user/xingchen.song/share/cache/matplotlib
+export HF_HOME=${cache_prefix}/huggingface
+export NUMBA_CACHE_DIR=${cache_prefix}/numba
+export MPLCONFIGDIR=${cache_prefix}/matplotlib
+
+echo "$0: CUDA_HOME: ${CUDA_HOME}"
+echo "$0: HF_HOME: ${HF_HOME}"
+echo "$0: TOUCHNET_DIR: ${TOUCHNET_DIR}"
+echo "$0: XDG_CACHE_HOME: ${XDG_CACHE_HOME}"
+echo "$0: NUMBA_CACHE_DIR: ${NUMBA_CACHE_DIR}"
+echo "$0: MPLCONFIGDIR: ${MPLCONFIGDIR}"
