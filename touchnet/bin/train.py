@@ -324,7 +324,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         # TODO(xcsong): audio_max_len?
         logger.info(
             "Trainer initialized. "
-            f"Training starts at epoch {self.dataloader.dataset.state_dict()['epoch']} / {self.data_config.datalist_epoch}, "
+            f"Training starts at epoch {self.dataloader.get_epoch()} / {self.data_config.datalist_epoch}, "
             f"step {self.step + 1}, "
             f"with local batch size {data_config.dataset_batchsize}, "
             f"global batch size {data_config.dataset_batchsize * dp_world_size}, "
@@ -500,7 +500,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                 raise NotImplementedError("TODO: support other parallelisms")
 
             self.metrics_processor.log(
-                self.dataloader.dataset.state_dict()['epoch'], self.step,
+                self.dataloader.get_epoch(), self.step,
                 global_avg_loss_per_sample,
                 global_avg_loss_per_token, global_max_loss_per_token,
                 norm.mean().detach().item(), norm.max().detach().item(),
@@ -598,7 +598,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                 break
 
         self.metrics_processor.log_dev(
-            epoch=self.dataloader.dataset.state_dict()['epoch'], step=self.step,
+            epoch=self.dataloader.get_epoch(), step=self.step,
             global_avg_loss_per_sample=sum([loss_tuple[0] for loss_tuple in losses]) / len(losses),
             global_avg_loss_per_token=sum([loss_tuple[1] for loss_tuple in losses]) / len(losses),
             global_max_loss_per_token=max([loss_tuple[2] for loss_tuple in losses]),

@@ -44,7 +44,7 @@ class TouchDatapipe(IterableDataset, Stateful):
         self.consumed_lists = state_dict["consumed_lists"]
         self.consumed_samples = state_dict["consumed_samples"]
 
-    def state_dict(self):
+    def state_dict(self) -> Dict[str, Any]:
         return {
             "epoch": self.epoch,
             "consumed_lists": self.consumed_lists,
@@ -178,7 +178,7 @@ class Processor(IterableDataset, Stateful):
         assert self.source is not None
         self.source.load_state_dict(state_dict)
 
-    def state_dict(self):
+    def state_dict(self) -> Dict[str, Any]:
         assert self.source is not None
         return self.source.state_dict()
 
