@@ -549,7 +549,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         self.metrics_processor.close()
         logger.info("Training completed")
 
-    @torch.no_grad
+    @torch.no_grad()
     def dev_step(self, data: Dict[str, Any]):
         if self.parallel_dims.pp_enabled:
             raise NotImplementedError("TODO(xcsong): support PP.")
@@ -579,7 +579,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         return (global_avg_loss_per_sample, global_avg_loss_per_token, global_max_loss_per_token)
 
     @record
-    @torch.no_grad
+    @torch.no_grad()
     def dev(self):
         for model in self.model_parts:
             model.eval()
