@@ -3,7 +3,7 @@ from typing import Tuple
 import torch
 from torch.distributed.tensor import DTensor, Replicate
 from transformers import AutoConfig, AutoModelForCausalLM
-from transformers.models.llama import LlamaForCausalLM
+from transformers.models.llama import LlamaConfig, LlamaForCausalLM
 from transformers.models.llama.modeling_llama import LlamaRMSNorm
 
 from touchnet.data.dataloader import build_dataloader
@@ -59,6 +59,24 @@ def post_init(model: LlamaForCausalLM, init_device: torch.device):
         torch.nn.init.ones_(layer.post_attention_layernorm.weight)
 
 
+def get_num_flop_per_token(num_params: int, model_config: LlamaConfig, seq_len: int) -> int:
+    l, h, q, t = (
+        model_config.num_hidden_layers,
+        model_config.num_attention_heads,
+        model_config.hidden_size // model_config.num_attention_heads,
+        seq_len,
+    )
+    # Reasoning behind the factor of 12 for the self-attention part of the formula:
+    # 1. each self-attention has 2 matmul in the forward and 4 in the backward (6)
+    # 2. the flash attention does 1 more matmul recomputation in the backward
+    #    but recomputation should not be counted in calculating MFU           (+0)
+    # 3. each matmul performs 1 multiplication and 1 addition                 (*2)
+    # 4. we follow the convention and do not account for sparsity in causal attention
+    flop_per_token = 6 * num_params + 12 * l * h * q * t
+
+    return flop_per_token
+
+
 register_train_spec(
     TrainSpec(
         name="llama",
@@ -73,5 +91,6 @@ register_train_spec(
         loss_fn=cross_entropy_loss,
         additional_post_init_fn=post_init,
         build_metrics_processor_fn=build_metrics_processor,
+        get_num_flop_per_token_fn=get_num_flop_per_token,
     )
 )

@@ -30,7 +30,7 @@ from touchnet.utils.distributed import (GarbageCollection, ParallelDims,
                                         set_pg_timeouts)
 from touchnet.utils.logging import init_logger, logger
 from touchnet.utils.metrics import (MetricsProcessor, ensure_pp_loss_visible,
-                                    get_num_flop_per_token, get_num_params)
+                                    get_num_params)
 from touchnet.utils.optimizer import LRSchedulersContainer, OptimizersContainer
 from touchnet.utils.profiling import (maybe_enable_memory_snapshot,
                                       maybe_enable_profiling)
@@ -161,8 +161,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         # log model size
         model_param_count = get_num_params(model, exclude_embedding=False)
         model_param_count_wo_emb = get_num_params(model, exclude_embedding=True)
-        # TODO(xcsong): support encoder-decoder flops
-        self.metrics_processor.num_flop_per_token = get_num_flop_per_token(
+        self.metrics_processor.num_flop_per_token = self.train_spec.get_num_flop_per_token_fn(
             model_param_count_wo_emb,
             model_config,
             data_config.dataset_text_seqlen,
