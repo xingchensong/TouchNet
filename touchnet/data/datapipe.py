@@ -44,7 +44,7 @@ class TouchDatapipe(IterableDataset, Stateful):
         self.consumed_lists = state_dict["consumed_lists"]
         self.consumed_samples = state_dict["consumed_samples"]
 
-    def state_dict(self):
+    def state_dict(self) -> Dict[str, Any]:
         return {
             "epoch": self.epoch,
             "consumed_lists": self.consumed_lists,
@@ -52,98 +52,102 @@ class TouchDatapipe(IterableDataset, Stateful):
         }
 
     def __iter__(self):
-        list_idxs = list(range(len(self.lists)))
+        while self.epoch < self.config.datalist_epoch:
+            list_idxs = list(range(len(self.lists)))
 
-        # 1st shuffle on lists
-        if self.config.datalist_shuffling:
-            g = torch.Generator()
-            g.manual_seed(self.epoch)
-            list_idxs = torch.randperm(len(self.lists), generator=g).tolist()
+            # 1st shuffle on lists
+            if self.config.datalist_shuffling:
+                g = torch.Generator()
+                g.manual_seed(self.epoch)
+                list_idxs = torch.randperm(len(self.lists), generator=g).tolist()
 
-        # 1st sharding on dp ranks
-        if self.config.datalist_sharding:
-            list_idxs = list_idxs[self.dp_rank::self.dp_world_size]
+            # 1st sharding on dp ranks
+            if self.config.datalist_sharding:
+                list_idxs = list_idxs[self.dp_rank::self.dp_world_size]
 
-        # 2nd sharding on dataloader workers
-        worker_info = torch.utils.data.get_worker_info()
-        if worker_info is None:
-            worker_id = 0
-            num_workers = 1
-        else:
-            worker_id = worker_info.id
-            num_workers = worker_info.num_workers
-        list_idxs = list_idxs[worker_id::num_workers]
-
-        start_list = self.consumed_lists
-        for list_idx in list_idxs[start_list:]:
-            _dataset = TouchDataset(self.lists[list_idx]["dir"],
-                                    self.config.dataset_mmap,
-                                    self.lists[list_idx]["datatypes"])
-
-            # 2nd shuffle on samples
-            num_samples = len(_dataset)
-            g = torch.Generator()
-            g.manual_seed(self.epoch + self.consumed_lists)
-            if self.config.dataset_shuffling:
-                sample_idxs = torch.randperm(num_samples, generator=g).tolist()
+            # 2nd sharding on dataloader workers
+            worker_info = torch.utils.data.get_worker_info()
+            if worker_info is None:
+                worker_id = 0
+                num_workers = 1
             else:
-                sample_idxs = list(range(num_samples))
+                worker_id = worker_info.id
+                num_workers = worker_info.num_workers
+            list_idxs = list_idxs[worker_id::num_workers]
 
-            start_sample = self.consumed_samples
-            for sample_idx in sample_idxs[start_sample:]:
-                if self.lists[list_idx]["datatypes"] == "metainfo":
-                    # for text pre-training
-                    metainfo = _dataset.get(sample_idx, "metainfo")
-                    metainfo = metainfo.tobytes().decode('utf-8')
-                    metainfo = json.loads(metainfo.strip())
-                    metainfo["datatypes"] = "metainfo"
-                    yield metainfo
-                elif self.lists[list_idx]["datatypes"] == "texttoken":
-                    # for text pre-training
-                    texttoken = _dataset.get(sample_idx, "texttoken").tolist()
-                    yield dict(input_ids=texttoken, datatypes="texttoken")
-                elif self.lists[list_idx]["datatypes"] == "audio":
-                    # for audio pre-training
-                    if self.config.dataset_random_cut_audio:
-                        audio_p, audio_l = _dataset.get_idx(sample_idx, "audio")
-                        # TODO(xcsong): slice audio
-                        pass
-                    else:
-                        audio = _dataset.get(sample_idx, "audio")
-                    yield dict(audio=audio, datatypes="audio")
-                elif self.lists[list_idx]["datatypes"] == "audio+metainfo":
-                    # for audio-text alignment
-                    metainfo = _dataset.get(sample_idx, "metainfo")
-                    metainfo = metainfo.tobytes().decode('utf-8')
-                    metainfo = json.loads(metainfo.strip())
-                    offset = 0
-                    length = None
-                    info = metainfo.get("info", None)
-                    if info is not None:
-                        segments = info.get("segments", None)
-                        if segments is not None:
-                            assert "sample_rate" in info
-                            sample_rate = info["sample_rate"]
-                            g = torch.Generator()
-                            g.manual_seed(self.epoch + self.consumed_lists + self.consumed_samples)
-                            segment = segments[torch.randint(len(segments), (1,), generator=g).item()]
-                            start = int(float(segment["start"]) * sample_rate)
-                            end = int(float(segment["end"]) * sample_rate)
-                            offset = start
-                            length = end - start
-                    audio = _dataset.get(sample_idx, "audio", offset=offset, length=length)
-                    audio = audio.astype(numpy.float32) / 32768.0  # normalize to [-1.0, 1.0]
-                    metainfo["waveform"] = torch.from_numpy(audio).unsqueeze(0)  # [1, T]
-                    metainfo["datatypes"] = "audio+metainfo"
-                    yield metainfo
+            start_list = self.consumed_lists
+            for list_idx in list_idxs[start_list:]:
+                _dataset = TouchDataset(self.lists[list_idx]["dir"],
+                                        self.config.dataset_mmap,
+                                        self.lists[list_idx]["datatypes"])
+
+                # 2nd shuffle on samples
+                num_samples = len(_dataset)
+                g = torch.Generator()
+                g.manual_seed(self.epoch + self.consumed_lists)
+                if self.config.dataset_shuffling:
+                    sample_idxs = torch.randperm(num_samples, generator=g).tolist()
                 else:
-                    raise NotImplementedError(f"unsupported datatypes: {self.lists[list_idx]['datatypes']}")
-                self.consumed_samples += 1
+                    sample_idxs = list(range(num_samples))
 
+                start_sample = self.consumed_samples
+                for sample_idx in sample_idxs[start_sample:]:
+                    if self.lists[list_idx]["datatypes"] == "metainfo":
+                        # for text pre-training
+                        metainfo = _dataset.get(sample_idx, "metainfo")
+                        metainfo = metainfo.tobytes().decode('utf-8')
+                        metainfo = json.loads(metainfo.strip())
+                        metainfo["datatypes"] = "metainfo"
+                        yield metainfo
+                    elif self.lists[list_idx]["datatypes"] == "texttoken":
+                        # for text pre-training
+                        texttoken = _dataset.get(sample_idx, "texttoken").tolist()
+                        yield dict(input_ids=texttoken, datatypes="texttoken")
+                    elif self.lists[list_idx]["datatypes"] == "audio":
+                        # for audio pre-training
+                        if self.config.dataset_random_cut_audio:
+                            audio_p, audio_l = _dataset.get_idx(sample_idx, "audio")
+                            # TODO(xcsong): slice audio
+                            pass
+                        else:
+                            audio = _dataset.get(sample_idx, "audio")
+                        yield dict(audio=audio, datatypes="audio")
+                    elif self.lists[list_idx]["datatypes"] == "audio+metainfo":
+                        # for audio-text alignment
+                        metainfo = _dataset.get(sample_idx, "metainfo")
+                        metainfo = metainfo.tobytes().decode('utf-8')
+                        metainfo = json.loads(metainfo.strip())
+                        offset = 0
+                        length = None
+                        info = metainfo.get("info", None)
+                        if info is not None:
+                            segments = info.get("segments", None)
+                            if segments is not None:
+                                assert "sample_rate" in info
+                                sample_rate = info["sample_rate"]
+                                g = torch.Generator()
+                                g.manual_seed(self.epoch + self.consumed_lists + self.consumed_samples)
+                                segment = segments[torch.randint(len(segments), (1,), generator=g).item()]
+                                start = int(float(segment["start"]) * sample_rate)
+                                end = int(float(segment["end"]) * sample_rate)
+                                offset = start
+                                length = end - start
+                        audio = _dataset.get(sample_idx, "audio", offset=offset, length=length)
+                        audio = audio.astype(numpy.float32) / 32768.0  # normalize to [-1.0, 1.0]
+                        metainfo["waveform"] = torch.from_numpy(audio).unsqueeze(0)  # [1, T]
+                        metainfo["datatypes"] = "audio+metainfo"
+                        yield metainfo
+                    else:
+                        raise NotImplementedError(f"unsupported datatypes: {self.lists[list_idx]['datatypes']}")
+                    self.consumed_samples += 1
+
+                self.consumed_samples = 0
+                self.consumed_lists += 1
+
+            # Reset states
             self.consumed_samples = 0
-            self.consumed_lists += 1
-
-        self.consumed_lists = 0
+            self.consumed_lists = 0
+            self.epoch += 1
 
 
 class Processor(IterableDataset, Stateful):
@@ -174,7 +178,7 @@ class Processor(IterableDataset, Stateful):
         assert self.source is not None
         self.source.load_state_dict(state_dict)
 
-    def state_dict(self):
+    def state_dict(self) -> Dict[str, Any]:
         assert self.source is not None
         return self.source.state_dict()
 

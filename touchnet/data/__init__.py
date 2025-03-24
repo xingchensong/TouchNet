@@ -55,6 +55,15 @@ class DataConfig:
             )
         },
     )
+    datalist_epoch: int = field(
+        default=1,
+        metadata={
+            "help": (
+                "Set this value to a larger value to ensure that the total number of training steps "
+                "determined by the epoch is greater than or equal to `lr_scheduler_steps`."
+            ),
+        },
+    )
     datalist_shuffling: bool = field(
         default=True,
         metadata={

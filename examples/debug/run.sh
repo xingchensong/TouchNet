@@ -39,7 +39,7 @@ param_dtype="bfloat16"
 
 seed=2025
 model_config=config/debug.json
-exp_id="debug5_1B_1x16384_fullac_cp2_tp2_dp2_pp1_flex_packloss_tieemb_fromscratch_fixROPEbug_dev_wiki0.1B"
+exp_id="debug5_1B_1x16384_fullac_cp4_tp1_dp2_pp1_flex_packloss_tieemb_fromscratch_fixROPEbug_dev_wiki0.1B_infinite"
 cp=$(echo $exp_id | grep -oP 'cp\d+' | grep -oP '\d+')
 tp=$(echo $exp_id | grep -oP 'tp\d+' | grep -oP '\d+')
 dp=$(echo $exp_id | grep -oP 'dp\d+' | grep -oP '\d+')
@@ -133,6 +133,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --datalist_path "data/${train_set}/data.list" \
       --datalist_dev_path "data/${dev_set}/data.list" \
       --datalist_sharding true \
+      --datalist_epoch 10000 \
       --datalist_shuffling true \
       --dataset_shuffling true \
       --dataset_mmap true \

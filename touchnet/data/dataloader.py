@@ -5,7 +5,6 @@
 # LICENSE file in the root directory of this source tree.
 
 import copy
-import pickle
 from abc import ABC, abstractmethod
 from typing import Any, Literal
 
@@ -28,6 +27,10 @@ class BaseDataLoader(Stateful, ABC):
 
     @abstractmethod
     def __iter__(self):
+        ...
+
+    @abstractmethod
+    def get_epoch(self):
         ...
 
 
@@ -69,9 +72,7 @@ class ParallelAwareDataloader(StatefulDataLoader, BaseDataLoader):
     def state_dict(self) -> dict[str, Any]:
         # Store state only for dp rank to avoid replicating the same state across other dimensions.
         return {
-            # We don't have to use pickle as DCP will serialize the state_dict. However,
-            # we have to keep this for backward compatibility.
-            self._rank_id: pickle.dumps(super().state_dict()),
+            self._rank_id: super().state_dict(),
             "world_size": self.dp_world_size,
         }
 
@@ -91,9 +92,14 @@ class ParallelAwareDataloader(StatefulDataLoader, BaseDataLoader):
             "dp_degree is inconsistent before and after checkpoint, "
             "dataloader resharding is not supported yet."
         )
-        # We don't have to use pickle as DCP will serialize the state_dict. However, we have to
-        # keep this for backward compatibility.
-        super().load_state_dict(pickle.loads(state_dict[self._rank_id]))
+        super().load_state_dict(state_dict[self._rank_id])
+
+    def get_epoch(self) -> int:
+        epoch_for_every_worker = []
+        states = super().state_dict()['_snapshot']['_worker_snapshots']
+        for k in states.keys():
+            epoch_for_every_worker.append(states[k]['dataset_state']['epoch'])
+        return max(epoch_for_every_worker)
 
 
 def build_dataloader(data_config: DataConfig, tokenizer_config: TokenizerConfig,
