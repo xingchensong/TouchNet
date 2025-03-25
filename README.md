@@ -1,4 +1,25 @@
+<div align="center">
+
 # TouchNet
+
+#### A PyTorch native 4-D parallel library for large-scale multimodel LLM (text/audio/video) training
+
+[![integration tests](https://github.com/xingchensong/TouchNet/actions/workflows/unit_test_cpu.yaml/badge.svg?branch=main)](https://github.com/xingchensong/TouchNet/actions/workflows/unit_test_cpu.yaml?query=branch%3Amain)
+[![docs](https://img.shields.io/badge/docs-latest-blue.svg)](docs/)
+[![license](https://img.shields.io/badge/license-Apache_2-lightgrey.svg)](./LICENSE)
+
+</div>
+
+`touchnet` is currently in a pre-release state and under extensive development.
+
+**Feature Highlights:**
+
+- 🚀 Minimal, easy-to-use, extensible training framework
+- 🤗 Seamless integration with `transformers`
+- 🔄 Efficient data preprocessing: random access, blazing fast IO
+- 🔮 4D parallelism
+
+## Installation
 
 ```sh
 # NOTE(xcsong): Ensure that the system's glibc version is greater than or equal to 2.17 (see `ldd --version`)
@@ -15,7 +36,17 @@ pip install torch==2.6.0+cu126 torchaudio==2.6.0+cu126 --extra-index-url https:/
 pip install -r requirements.txt
 ```
 
-- [ ] dataset (& UT)
-- [ ] model (& UT)
-- [ ] train (& UT)
-- [ ] infer (& UT)
+## Citation
+
+```
+@misc{touchnet,
+  title={TouchNet: A PyTorch native 4-D parallel library for large-scale multimodel LLM (text/audio/video) training},
+  author={Xingchen Song},
+  year={2025},
+  url={https://github.com/xingchensong/TouchNet},
+}
+```
+
+## Acknowledge
+
+1. We borrowed a lot of code from [torchtitan](https://github.com/pytorch/torchtitan).
