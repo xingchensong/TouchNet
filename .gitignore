@@ -182,3 +182,6 @@ data.list
 # Experiments
 exp/
 examples/*/data/
+examples/*/*/data/
+examples/*/*/*/data/
+examples/*/*/*/*/data/
