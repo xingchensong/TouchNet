@@ -28,18 +28,18 @@ num_nodes=1
 
 job_id=2026
 
-hf_data_repo="Salesforce/wikitext"
-hf_data_name="wikitext-103-v1"
+hf_data_repo="allenai/c4"
+hf_data_name="en"
 
 train_set=train
 dev_set=validation
-test_sets=test
+test_sets=  # c4 has no test set
 
 param_dtype="bfloat16"
 
 seed=2025
 model_config=config/debug.json
-exp_id="debug5_1B_1x16384_fullac_cp4_tp1_dp2_pp1_flex_packloss_tieemb_fromscratch_fixROPEbug_dev_wiki0.1B_infinite"
+exp_id="c4.en_1B_1x16384_fullac_cp4_tp1_dp2_pp1_flex_packloss_tieemb_fromscratch"
 cp=$(echo $exp_id | grep -oP 'cp\d+' | grep -oP '\d+')
 tp=$(echo $exp_id | grep -oP 'tp\d+' | grep -oP '\d+')
 dp=$(echo $exp_id | grep -oP 'dp\d+' | grep -oP '\d+')
@@ -63,7 +63,7 @@ prefetch=6
 
 if [ ${stage} -le -1 ] && [ ${stop_stage} -ge -1 ]; then
   echo "$0: stage -1: Data Download"
-  python download_wikitext.py
+  python download_c4.py
 fi
 
 if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
@@ -71,16 +71,27 @@ if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
     if [ ! -d "data/${x}/data.list" ]; then
       echo "$0: data/${x}/data.list does not exist. generate dataset."
       mkdir -p data/${x}
-      python touchnet/bin/make_data.py \
-          --save_dir "data/${x}" \
-          --jsonl_path ${HF_HOME}/datasets/converted_jsonl_for_touchnet/${hf_data_repo}/${hf_data_name}/${x}.jsonl \
-          --tokenizer_model "/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct" \
-          --tokenizer_type "HuggingFaceTokenizer" \
-          --num_utt_per_shard 2000 \
-          --num_workers 16 \
-          --datatypes 'texttoken'
+      find "${HF_HOME}/datasets/converted_jsonl_for_touchnet/${hf_data_repo}/${hf_data_name}/" \
+        -maxdepth 1 \
+        -type f \
+        -name "${x}*jsonl" \
+        -print0 | \
+      while IFS= read -r -d $'\0' text; do
+        echo "$0: processing ${text}"
+        mkdir -p "data/${x}/$(basename $text)"
+        python touchnet/bin/make_data.py \
+            --save_dir "data/${x}/$(basename $text)" \
+            --jsonl_path "${text}" \
+            --tokenizer_model "/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct" \
+            --tokenizer_type "HuggingFaceTokenizer" \
+            --num_utt_per_shard 2000 \
+            --num_workers 16 \
+            --datatypes "texttoken"
+      done
+      cat data/${x}/*/data.list > data/${x}/data.list
     fi
   done
+  exit
 fi
 
 if [[ $exp_id == *"fromseed"* ]]; then
