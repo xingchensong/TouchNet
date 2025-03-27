@@ -4,6 +4,7 @@ cuda_prefix=/bucket/output/jfs-hdfs/user/xingchen.song/tools/cuda
 cuda_version=12.6.3
 driver_version=560.35.05
 cudnn_version=9.5.1.17
+pretrained_weight_dir="/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct"
 
 # Automatically detect number of gpus
 if command -v nvidia-smi &> /dev/null; then
@@ -38,8 +39,8 @@ test_sets=  # c4 has no test set
 param_dtype="bfloat16"
 
 seed=2025
-model_config=config/debug.json
-exp_id="c4.en_1B_1x16384_fullac_cp4_tp1_dp2_pp1_flex_packloss_tieemb_fromscratch"
+model_config=config/Llama-3.2-1B.json
+exp_id="c4.en_1B_1x16384_fullac_cp4_tp1_dp2_pp1_flex_packloss_tieemb_fromscratch_linear2K1M_fixdev_head20"
 cp=$(echo $exp_id | grep -oP 'cp\d+' | grep -oP '\d+')
 tp=$(echo $exp_id | grep -oP 'tp\d+' | grep -oP '\d+')
 dp=$(echo $exp_id | grep -oP 'dp\d+' | grep -oP '\d+')
@@ -47,8 +48,6 @@ pp=$(echo $exp_id | grep -oP 'pp\d+' | grep -oP '\d+')
 bs=$(echo $exp_id | grep -oP '\d+x\d+' | grep -oP '\d+' | head -n 1)
 max_seq_len=$(echo $exp_id | grep -oP '\d+x\d+' | grep -oP '\d+' | tail -n 1)
 echo "$0: ${exp_id}: cp=${cp}, tp=${tp}, dp=${dp}, pp=${pp}, bs=${bs}, max_seq_len=${max_seq_len}"
-
-training_model_pretrained_weight_dir="/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct"
 
 tensorboard_dir=tensorboard
 num_workers=6
@@ -68,7 +67,7 @@ fi
 
 if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
   for x in ${train_set} ${dev_set} ${test_sets}; do
-    if [ ! -d "data/${x}/data.list" ]; then
+    if [ ! -f "data/${x}/data.list" ]; then
       echo "$0: data/${x}/data.list does not exist. generate dataset."
       mkdir -p data/${x}
       find "${HF_HOME}/datasets/converted_jsonl_for_touchnet/${hf_data_repo}/${hf_data_name}/" \
@@ -82,7 +81,7 @@ if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
         python touchnet/bin/make_data.py \
             --save_dir "data/${x}/$(basename $text)" \
             --jsonl_path "${text}" \
-            --tokenizer_model "/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct" \
+            --tokenizer_model "${pretrained_weight_dir}" \
             --tokenizer_type "HuggingFaceTokenizer" \
             --num_utt_per_shard 2000 \
             --num_workers 16 \
@@ -91,21 +90,29 @@ if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
       cat data/${x}/*/data.list > data/${x}/data.list
     fi
   done
-  exit
+
+  for x in ${dev_set}; do
+    # NOTE(xcsong): we only use 20 lists for dev set, this is to speed up validation.
+    if [ ! -f "data/${x}/data.list.head20" ]; then
+      echo "$0: data/${x}/data.list.head20 does not exist. generate it."
+      mkdir -p data/${x}
+      shuf data/${x}/data.list | head -20 > data/${x}/data.list.head20
+    fi
+  done
 fi
 
-if [[ $exp_id == *"fromseed"* ]]; then
-  training_model_pretrained_weight_dir=""
+if [ $exp_id == *"fromseed"* ] && [ ${stop_stage} -ge 2 ]; then
+  pretrained_weight_dir=""
   stage=1
   stop_stage=2
 fi
 
-if [[ $exp_id == *"fromscratch"* ]]; then
+if [ $exp_id == *"fromscratch"* ] && [ ${stop_stage} -ge 2 ]; then
   stage=2
   stop_stage=2
 fi
 
-if [[ $exp_id == *"frompretrain"* ]]; then
+if [ $exp_id == *"frompretrain"* ] && [ ${stop_stage} -ge 2 ]; then
   stage=1
   stop_stage=2
 fi
@@ -117,13 +124,13 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
   torchrun --nnodes=1 --nproc_per_node=1 \
            --rdzv_id=$job_id --rdzv_backend="c10d" --rdzv_endpoint=$HOST_NODE_ADDR \
     touchnet/bin/train.py \
-      --tokenizer_model "/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct" \
+      --tokenizer_model "${pretrained_weight_dir}" \
       --tokenizer_type "HuggingFaceTokenizer" \
       --datalist_path "data/${train_set}/data.list" \
       --training_seed "${seed}" \
       --training_model_name "llama" \
       --training_model_config_path "${model_config}" \
-      --training_model_pretrained_weight_dir "${training_model_pretrained_weight_dir}" \
+      --training_model_pretrained_weight_dir "${pretrained_weight_dir}" \
       --training_print_args true \
       --training_trace_dump_folder "exp/${exp_id}" \
       --training_enable_ckpt true \
@@ -137,12 +144,12 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
   # export TORCHDYNAMO_VERBOSE=1
   torchrun --nnodes=$num_nodes --nproc_per_node=$num_gpus \
            --rdzv_id=$job_id --rdzv_backend="c10d" --rdzv_endpoint=$HOST_NODE_ADDR \
-           --local-ranks-filter "0,4" \
+           --local-ranks-filter "0" \
     touchnet/bin/train.py \
-      --tokenizer_model "/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct" \
+      --tokenizer_model "${pretrained_weight_dir}" \
       --tokenizer_type "HuggingFaceTokenizer" \
       --datalist_path "data/${train_set}/data.list" \
-      --datalist_dev_path "data/${dev_set}/data.list" \
+      --datalist_dev_path "data/${dev_set}/data.list.head20" \
       --datalist_sharding true \
       --datalist_epoch 10000 \
       --datalist_shuffling true \
@@ -150,11 +157,11 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --dataset_mmap true \
       --dataset_batchsize ${bs} \
       --dataset_text_seqlen ${max_seq_len} \
-      --text_max_length_in_tokens_for_filter ${max_seq_len} \
+      --text_max_length_in_tokens_for_filter $(expr $max_seq_len - 2) \
       --text_min_length_in_tokens_for_filter 1 \
       --dataloader_num_workers ${num_workers} \
       --dataloader_prefetch_factor ${prefetch} \
-      --training_description "debug only" \
+      --training_description "allenai c4.en" \
       --training_seed "${seed}" \
       --training_model_name "llama" \
       --training_model_config_path "${model_config}" \
@@ -169,7 +176,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --training_pipeline_parallel_schedule "1F1B" \
       --training_enable_ckpt true \
       --training_ckpt_load_step -1 \
-      --training_ckpt_interval 100 \
+      --training_ckpt_interval 500 \
       --training_ckpt_keep_latest_k 2 \
       --training_log_freq 1 \
       --training_enable_tensorboard true \
@@ -193,8 +200,8 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --optimizer_name "AdamW" \
       --optimizer_lr 8e-4 \
       --optimizer_impl "fused" \
-      --lr_scheduler_steps 10000 \
-      --lr_scheduler_warmup_steps 200 \
+      --lr_scheduler_steps 1000000 \
+      --lr_scheduler_warmup_steps 2000 \
       --lr_scheduler_decay_type "linear" \
       --lr_scheduler_lr_min 0.0
 fi

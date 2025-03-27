@@ -4,6 +4,7 @@ cuda_prefix=/bucket/output/jfs-hdfs/user/xingchen.song/tools/cuda
 cuda_version=12.6.3
 driver_version=560.35.05
 cudnn_version=9.5.1.17
+pretrained_weight_dir="/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct"
 
 # Automatically detect number of gpus
 if command -v nvidia-smi &> /dev/null; then
@@ -48,8 +49,6 @@ bs=$(echo $exp_id | grep -oP '\d+x\d+' | grep -oP '\d+' | head -n 1)
 max_seq_len=$(echo $exp_id | grep -oP '\d+x\d+' | grep -oP '\d+' | tail -n 1)
 echo "$0: ${exp_id}: cp=${cp}, tp=${tp}, dp=${dp}, pp=${pp}, bs=${bs}, max_seq_len=${max_seq_len}"
 
-training_model_pretrained_weight_dir="/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct"
-
 tensorboard_dir=tensorboard
 num_workers=6
 prefetch=6
@@ -68,13 +67,13 @@ fi
 
 if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
   for x in ${train_set} ${dev_set} ${test_sets}; do
-    if [ ! -d "data/${x}/data.list" ]; then
+    if [ ! -f "data/${x}/data.list" ]; then
       echo "$0: data/${x}/data.list does not exist. generate dataset."
       mkdir -p data/${x}
       python touchnet/bin/make_data.py \
           --save_dir "data/${x}" \
           --jsonl_path ${HF_HOME}/datasets/converted_jsonl_for_touchnet/${hf_data_repo}/${hf_data_name}/${x}.jsonl \
-          --tokenizer_model "/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct" \
+          --tokenizer_model "${pretrained_weight_dir}" \
           --tokenizer_type "HuggingFaceTokenizer" \
           --num_utt_per_shard 2000 \
           --num_workers 16 \
@@ -83,18 +82,18 @@ if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
   done
 fi
 
-if [[ $exp_id == *"fromseed"* ]]; then
-  training_model_pretrained_weight_dir=""
+if [ $exp_id == *"fromseed"* ] && [ ${stop_stage} -ge 2 ]; then
+  pretrained_weight_dir=""
   stage=1
   stop_stage=2
 fi
 
-if [[ $exp_id == *"fromscratch"* ]]; then
+if [ $exp_id == *"fromscratch"* ] && [ ${stop_stage} -ge 2 ]; then
   stage=2
   stop_stage=2
 fi
 
-if [[ $exp_id == *"frompretrain"* ]]; then
+if [ $exp_id == *"frompretrain"* ] && [ ${stop_stage} -ge 2 ]; then
   stage=1
   stop_stage=2
 fi
@@ -106,13 +105,13 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
   torchrun --nnodes=1 --nproc_per_node=1 \
            --rdzv_id=$job_id --rdzv_backend="c10d" --rdzv_endpoint=$HOST_NODE_ADDR \
     touchnet/bin/train.py \
-      --tokenizer_model "/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct" \
+      --tokenizer_model "${pretrained_weight_dir}" \
       --tokenizer_type "HuggingFaceTokenizer" \
       --datalist_path "data/${train_set}/data.list" \
       --training_seed "${seed}" \
       --training_model_name "llama" \
       --training_model_config_path "${model_config}" \
-      --training_model_pretrained_weight_dir "${training_model_pretrained_weight_dir}" \
+      --training_model_pretrained_weight_dir "${pretrained_weight_dir}" \
       --training_print_args true \
       --training_trace_dump_folder "exp/${exp_id}" \
       --training_enable_ckpt true \
@@ -126,9 +125,9 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
   # export TORCHDYNAMO_VERBOSE=1
   torchrun --nnodes=$num_nodes --nproc_per_node=$num_gpus \
            --rdzv_id=$job_id --rdzv_backend="c10d" --rdzv_endpoint=$HOST_NODE_ADDR \
-           --local-ranks-filter "0,4" \
+           --local-ranks-filter "0,1,2,3,4,5,6,7" \
     touchnet/bin/train.py \
-      --tokenizer_model "/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct" \
+      --tokenizer_model "${pretrained_weight_dir}" \
       --tokenizer_type "HuggingFaceTokenizer" \
       --datalist_path "data/${train_set}/data.list" \
       --datalist_dev_path "data/${dev_set}/data.list" \
@@ -139,7 +138,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --dataset_mmap true \
       --dataset_batchsize ${bs} \
       --dataset_text_seqlen ${max_seq_len} \
-      --text_max_length_in_tokens_for_filter ${max_seq_len} \
+      --text_max_length_in_tokens_for_filter $(expr $max_seq_len - 2) \
       --text_min_length_in_tokens_for_filter 1 \
       --dataloader_num_workers ${num_workers} \
       --dataloader_prefetch_factor ${prefetch} \
