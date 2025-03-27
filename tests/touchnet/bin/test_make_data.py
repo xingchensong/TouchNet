@@ -1,6 +1,12 @@
+import json
 import subprocess
 
 import pytest
+import torch
+import torchaudio
+
+from touchnet.data import DataConfig
+from touchnet.data.datapipe import TouchDatapipe
 
 
 @pytest.fixture
@@ -39,4 +45,29 @@ def test_make_data(run_shell, num, expected_md5):
         """
     )
     assert md5.stdout.strip() == expected_md5
+    orig_data = {}
+    with open("tests/assets/dataset/data.jsonl", "r") as f:
+        for line in f.readlines():
+            data = json.loads(line.strip())
+            orig_data[data['key']] = data
+    data_config = DataConfig()
+    data_config.datalist_path = f"tests/tmp/{num}sample_per_shard/data.list"
+    data_config.datalist_shuffling = False
+    data_config.datalist_sharding = False
+    data_config.datalist_epoch = 1
+    data_config.dataset_shuffling = False
+    data_config.audio_speed_perturb = False
+    data_config.audiofeat_spec_aug = False
+    data_config.audiofeat_spec_sub = False
+    data_config.audiofeat_spec_trim = False
+    data_config.audiofeat_dither = 0.0
+    datapipe = TouchDatapipe(data_config, 0, 1)
+    for data in datapipe:
+        key = data['key']
+        assert key in orig_data
+        assert data['wav'] == orig_data[key]['wav']
+        assert data['txt'] == orig_data[key]['txt']
+        orig_waveform = torchaudio.load(data['wav'])[0]
+        waveform = data['waveform']
+        assert torch.allclose(orig_waveform, waveform)
     run_shell(f"rm -rf tests/tmp/{num}sample_per_shard")

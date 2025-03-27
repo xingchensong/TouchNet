@@ -170,6 +170,7 @@ def build_texttoken(
             if len(data["text"]) == 0:
                 continue
             # TODO(xcsong): split sentence ?
+            # NOTE(xcsong): add bos/eos in batch_xxx()
             texttoken = tokenizer.tokenize(data["text"], add_special_tokens=False)
         except Exception as ex:
             logger.warning(f"Catch exception in reading {sample}: {ex}")

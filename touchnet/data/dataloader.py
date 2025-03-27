@@ -119,13 +119,11 @@ def build_dataloader(data_config: DataConfig, tokenizer_config: TokenizerConfig,
         if split == 'dev':
             assert data_config.datalist_dev_path, "dev datalist path is not provided"
             data_config.datalist_sharding = False
+            data_config.datalist_epoch = 1
             data_config.datalist_path = data_config.datalist_dev_path
-            # NOTE(xcsong): Fix batch size for fair comprasion between different training setups
-            data_config.dataset_batchsize = 1
-            data_config.dataset_audio_seqlen = 4096
-            data_config.dataset_text_seqlen = 4096
         elif split == 'test':
             assert data_config.datalist_test_path, "test datalist path is not provided"
+            data_config.datalist_epoch = 1
             data_config.datalist_path = data_config.datalist_test_path
 
     # TODO(xcsong): support more datapipe?
