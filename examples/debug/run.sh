@@ -82,18 +82,18 @@ if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
   done
 fi
 
-if [ $exp_id == *"fromseed"* ] && [ ${stop_stage} -ge 2 ]; then
+if [[ $exp_id == *"fromseed"* ]] && [ ${stop_stage} -ge 2 ]; then
   pretrained_weight_dir=""
   stage=1
   stop_stage=2
 fi
 
-if [ $exp_id == *"fromscratch"* ] && [ ${stop_stage} -ge 2 ]; then
+if [[ $exp_id == *"fromscratch"* ]] && [ ${stop_stage} -ge 2 ]; then
   stage=2
   stop_stage=2
 fi
 
-if [ $exp_id == *"frompretrain"* ] && [ ${stop_stage} -ge 2 ]; then
+if [[ $exp_id == *"frompretrain"* ]] && [ ${stop_stage} -ge 2 ]; then
   stage=1
   stop_stage=2
 fi
