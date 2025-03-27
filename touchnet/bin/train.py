@@ -149,7 +149,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             f"Attention: {model_config._attn_implementation}"
         )
         with torch.device("meta"):
-            model = model_cls.from_config(model_config)
+            model = model_cls(model_config)
             # NOTE: defer weight initialization until after parallelisms are applied
             model.apply(lambda m: setattr(m, "_is_hf_initialized", False))
 
@@ -337,8 +337,6 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         if perf:
             data_load_start = time.perf_counter()
         batch = next(data_iterator)
-        if not batch:
-            return None
         labels, position_ids = batch["labels"], batch["position_ids"]
         inputs_embeds = batch["inputs_embeds"]
         input_ids = batch["input_ids"]
@@ -591,7 +589,8 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
 
         data = self.next_batch(data_iterator, perf=False)
         while data:
-            losses.append(self.dev_step(data))
+            loss_tuple = self.dev_step(data)
+            losses.append(loss_tuple)
             try:
                 data = self.next_batch(data_iterator, perf=False)
             except StopIteration:  # last batch

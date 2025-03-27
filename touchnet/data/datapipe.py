@@ -114,17 +114,34 @@ class TouchDatapipe(IterableDataset, Stateful):
                         yield dict(audio=audio, datatypes="audio")
                     elif self.lists[list_idx]["datatypes"] == "audio+metainfo":
                         # for audio-text alignment
+                        """NOTE(xcsong) Example metainfo:
+                        {
+                            "key": "BAC009S0002W0122",
+                            "wav": "/jfs-hdfs/Aishell/train/S0002/BAC009S0002W0122.wav",
+                            "txt": "而对楼市成交抑制作用最大的限购",
+                            "sample_rate": 16000,
+                            "info": {
+                                "segments": [
+                                    {"start": 0.0, "end": 1.0, "txt": "而对"},
+                                    {"start": 1.0, "end": 2.0, "txt": "楼市"},
+                                    ...
+                                ],
+                                ...
+                                "xx": "yy"
+                            }
+                        }
+                        """
                         metainfo = _dataset.get(sample_idx, "metainfo")
                         metainfo = metainfo.tobytes().decode('utf-8')
                         metainfo = json.loads(metainfo.strip())
                         offset = 0
                         length = None
+                        sample_rate = metainfo["sample_rate"]
                         info = metainfo.get("info", None)
                         if info is not None:
                             segments = info.get("segments", None)
+                            # TODO(xcsong): Add arg to control segment selection
                             if segments is not None:
-                                assert "sample_rate" in info
-                                sample_rate = info["sample_rate"]
                                 g = torch.Generator()
                                 g.manual_seed(self.epoch + self.consumed_lists + self.consumed_samples)
                                 segment = segments[torch.randint(len(segments), (1,), generator=g).item()]
@@ -132,6 +149,7 @@ class TouchDatapipe(IterableDataset, Stateful):
                                 end = int(float(segment["end"]) * sample_rate)
                                 offset = start
                                 length = end - start
+                                metainfo['txt'] = segment['txt']
                         audio = _dataset.get(sample_idx, "audio", offset=offset, length=length)
                         audio = audio.astype(numpy.float32) / 32768.0  # normalize to [-1.0, 1.0]
                         metainfo["waveform"] = torch.from_numpy(audio).unsqueeze(0)  # [1, T]
@@ -191,7 +209,6 @@ def audio_and_metainfo_datapipe(
     """ Construct datapipe from configs
     """
     datapipe = TouchDatapipe(data_config, dp_rank, dp_world_size)
-    # TODO(xcsong): load state for datapipe
     tokenizer = build_tokenizer(tokenizer_config)
 
     datapipe = Processor(datapipe, processor.text_tokenize, tokenizer)

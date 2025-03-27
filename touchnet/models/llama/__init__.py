@@ -2,11 +2,12 @@ from typing import Tuple
 
 import torch
 from torch.distributed.tensor import DTensor, Replicate
-from transformers import AutoConfig, AutoModelForCausalLM
 from transformers.models.llama import LlamaConfig, LlamaForCausalLM
 from transformers.models.llama.modeling_llama import LlamaRMSNorm
 
 from touchnet.data.dataloader import build_dataloader
+# from touchnet.models.llama.configuration_llama import LlamaForASRConfig
+# from touchnet.models.llama.modeling_llama import LlamaForASR
 from touchnet.models.llama.parallelize_llama import parallelize_llama
 from touchnet.models.llama.pipeline_llama import pipeline_llama
 from touchnet.tokenizer.tokenizer import build_tokenizer
@@ -34,7 +35,11 @@ def cross_entropy_loss(
         reduction="none", ignore_index=ignore_index,
     )  # (bs * seq_len // cp,)
     # NOTE(xcsong): per-sample loss for backward while per-token loss for logging.
-    loss_per_token = (loss.sum() / num_tokens + 1e-6)  # (1,)
+    loss_per_token = loss.sum()
+    if loss_per_token > 1e-6 and num_tokens > 0:
+        loss_per_token = (loss.sum() / num_tokens)  # (1,)
+    else:
+        loss_per_token = torch.zeros_like(loss_per_token)
     loss_per_sample = loss.reshape(batch_size, -1)  # (bs, seq_len // cp)
     # 1. reduce loss over sentence
     loss_per_sample = torch.sum(loss_per_sample / sentence_lens, dim=-1)  # (bs,)
@@ -80,8 +85,8 @@ def get_num_flop_per_token(num_params: int, model_config: LlamaConfig, seq_len: 
 register_train_spec(
     TrainSpec(
         name="llama",
-        model_cls=AutoModelForCausalLM,
-        config_cls=AutoConfig,
+        model_cls=LlamaForCausalLM,
+        config_cls=LlamaConfig,
         parallelize_fn=parallelize_llama,
         pipelining_fn=pipeline_llama,
         build_optimizers_fn=build_optimizers,
@@ -94,3 +99,21 @@ register_train_spec(
         get_num_flop_per_token_fn=get_num_flop_per_token,
     )
 )
+
+# register_train_spec(
+#     TrainSpec(
+#         name="llama.asr",
+#         model_cls=LlamaForASR,
+#         config_cls=LlamaForASRConfig,
+#         parallelize_fn=parallelize_llama,
+#         pipelining_fn=pipeline_llama,
+#         build_optimizers_fn=build_optimizers,
+#         build_lr_schedulers_fn=build_lr_schedulers,
+#         build_dataloader_fn=build_dataloader,
+#         build_tokenizer_fn=build_tokenizer,
+#         loss_fn=cross_entropy_loss,
+#         additional_post_init_fn=post_init,
+#         build_metrics_processor_fn=build_metrics_processor,
+#         get_num_flop_per_token_fn=get_num_flop_per_token,
+#     )
+# )
