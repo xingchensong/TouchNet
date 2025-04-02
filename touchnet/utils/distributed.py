@@ -207,6 +207,10 @@ def dist_max(x: torch.Tensor, mesh: DeviceMesh) -> float:
     return _dist_reduce(x, reduceOp=c10d.ReduceOp.MAX.name, mesh=mesh)
 
 
+def dist_min(x: torch.Tensor, mesh: DeviceMesh) -> float:
+    return _dist_reduce(x, reduceOp=c10d.ReduceOp.MIN.name, mesh=mesh)
+
+
 def dist_mean(x: torch.Tensor, mesh: DeviceMesh) -> float:
     return _dist_reduce(x, reduceOp=c10d.ReduceOp.AVG.name, mesh=mesh)
 

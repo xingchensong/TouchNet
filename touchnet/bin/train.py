@@ -25,9 +25,9 @@ from touchnet.utils.distributed import (GarbageCollection, ParallelDims,
                                         clip_grad_norm_,
                                         create_context_parallel_ctx,
                                         device_module, device_type, dist_max,
-                                        dist_mean, dist_sum, get_train_context,
-                                        init_distributed, set_determinism,
-                                        set_pg_timeouts)
+                                        dist_mean, dist_min, dist_sum,
+                                        get_train_context, init_distributed,
+                                        set_determinism, set_pg_timeouts)
 from touchnet.utils.logging import init_logger, logger
 from touchnet.utils.metrics import (MetricsProcessor, ensure_pp_loss_visible,
                                     get_num_params)
@@ -456,7 +456,8 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                 )
                 # logits.shape = pred[0].shape = (bs, seq_len // cp, vocab_size // tp)
                 loss_per_sample, loss_per_token = self.train_spec.loss_fn(
-                    pred, data["labels"], data["sentence_lens"], data["num_sentence"])  # (1,), (1,)
+                    pred[0], data["labels"], data["sentence_lens"], data["num_sentence"])  # (1,), (1,)
+                acc = self.train_spec.acc_fn(pred[0], data["labels"])
                 # need to free to before bwd to avoid peaking memory
                 del pred
                 loss_per_sample.backward()
@@ -494,6 +495,10 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                     dist_mean(loss_per_token, self.world_mesh["dp_cp"]),
                     dist_max(loss_per_token, self.world_mesh["dp_cp"]),
                 )
+                global_avg_acc, global_min_acc = (
+                    dist_mean(acc, self.world_mesh["dp_cp"]),
+                    dist_min(acc, self.world_mesh["dp_cp"]),
+                )
             else:
                 raise NotImplementedError("TODO: support other parallelisms")
 
@@ -502,6 +507,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                 global_avg_loss_per_sample,
                 global_avg_loss_per_token, global_max_loss_per_token,
                 norm.mean().detach().item(), norm.max().detach().item(),
+                global_avg_acc, global_min_acc,
             )
 
     @record
@@ -565,7 +571,8 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                 )
                 # logits.shape = pred[0].shape = (bs, seq_len // cp, vocab_size // tp)
                 loss_per_sample, loss_per_token = self.train_spec.loss_fn(
-                    pred, data["labels"], data["sentence_lens"], data["num_sentence"])  # (1,), (1,)
+                    pred[0], data["labels"], data["sentence_lens"], data["num_sentence"])  # (1,), (1,)
+                acc = self.train_spec.acc_fn(pred[0], data["labels"])
                 # need to free to before bwd to avoid peaking memory
                 del pred
                 loss_per_sample = loss_per_sample.detach()
@@ -575,8 +582,13 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                     dist_mean(loss_per_token, self.world_mesh["dp_cp"]),
                     dist_max(loss_per_token, self.world_mesh["dp_cp"]),
                 )
+                global_avg_acc, global_min_acc = (
+                    dist_mean(acc, self.world_mesh["dp_cp"]),
+                    dist_min(acc, self.world_mesh["dp_cp"]),
+                )
 
-        return (global_avg_loss_per_sample, global_avg_loss_per_token, global_max_loss_per_token)
+        return (global_avg_loss_per_sample, global_avg_loss_per_token, global_max_loss_per_token,
+                global_avg_acc, global_min_acc)
 
     @record
     @torch.no_grad()
@@ -584,13 +596,13 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         for model in self.model_parts:
             model.eval()
 
-        losses = []
+        metrics = []
         data_iterator = iter(self.dataloader_dev)
 
         data = self.next_batch(data_iterator, perf=False)
         while data:
-            loss_tuple = self.dev_step(data)
-            losses.append(loss_tuple)
+            metric_tuple = self.dev_step(data)
+            metrics.append(metric_tuple)
             try:
                 data = self.next_batch(data_iterator, perf=False)
             except StopIteration:  # last batch
@@ -598,9 +610,11 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
 
         self.metrics_processor.log_dev(
             epoch=self.dataloader.get_epoch(), step=self.step,
-            global_avg_loss_per_sample=sum([loss_tuple[0] for loss_tuple in losses]) / len(losses),
-            global_avg_loss_per_token=sum([loss_tuple[1] for loss_tuple in losses]) / len(losses),
-            global_max_loss_per_token=max([loss_tuple[2] for loss_tuple in losses]),
+            global_avg_loss_per_sample=sum([tuple[0] for tuple in metrics]) / len(metrics),
+            global_avg_loss_per_token=sum([tuple[1] for tuple in metrics]) / len(metrics),
+            global_max_loss_per_token=max([tuple[2] for tuple in metrics]),
+            global_avg_acc=sum([tuple[3] for tuple in metrics]) / len(metrics),
+            global_min_acc=min([tuple[4] for tuple in metrics]),
         )
 
         if torch.distributed.get_rank() == 0:

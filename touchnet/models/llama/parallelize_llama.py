@@ -130,6 +130,20 @@ def apply_tp(
         },
     )
 
+    if hasattr(model, 'projector'):  # LlamaForASR
+        assert hasattr(model, 'audio_norm')
+        parallelize_module(
+            model,
+            tp_mesh,
+            {
+                "audio_norm": SequenceParallel(),
+                "projector": RowwiseParallel(
+                    input_layouts=Shard(1),
+                    output_layouts=Shard(1),
+                ),
+            },
+        )
+
     # Parallel styles used for transformer block linear weights and their
     # inputs may be different for float8 linears
     if enable_float8:

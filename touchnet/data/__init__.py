@@ -8,6 +8,17 @@ class DataConfig:
 
     _argument_group_name = "data"
 
+    datapipe_type: str = field(
+        default="texttoken",
+        metadata={
+            "help": (
+                "type of datapipe: "
+                "- 'texttoken': extract text token offline and save to *.bin "
+                "- 'audio+metainfo': save wav and text to *.bin, extract text token online during training"
+            ),
+            "choices": ["texttoken", "audio+metainfo"],
+        },
+    )
     datalist_path: str = field(
         default=None,
         metadata={
