@@ -131,14 +131,12 @@ def apply_tp(
     )
 
     if hasattr(model, 'projector'):  # LlamaForASR
-        assert hasattr(model, 'audio_norm')
         parallelize_module(
             model,
             tp_mesh,
             {
-                "audio_norm": SequenceParallel(),
                 "projector": RowwiseParallel(
-                    input_layouts=Shard(1),
+                    input_layouts=Replicate(),
                     output_layouts=Shard(1),
                 ),
             },

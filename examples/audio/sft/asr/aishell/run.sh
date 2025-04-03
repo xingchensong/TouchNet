@@ -43,7 +43,7 @@ param_dtype="bfloat16"
 
 seed=2025
 model_config=config/Llama-3.2.json
-exp_id="aishell_1x4096_fullac_cp1_tp1_dp8_pp1_stack7_stride6_flex_packloss_fromscratch_small_ar_std0.002_acc_norm_wp12k"
+exp_id="aishell_1x16384_fullac_cp2_tp2_dp2_pp1_stack7_stride6_flex_packloss_fromscratch_small_ar_std0.02_acc_norm_wp12k_add"
 cp=$(echo $exp_id | grep -oP 'cp\d+' | grep -oP '\d+')
 tp=$(echo $exp_id | grep -oP 'tp\d+' | grep -oP '\d+')
 dp=$(echo $exp_id | grep -oP 'dp\d+' | grep -oP '\d+')

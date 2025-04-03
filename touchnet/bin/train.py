@@ -112,8 +112,26 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         )
         self.train_spec = get_train_spec(job_config.training_model_name)
 
+        # build model_config
+        model_cls = self.train_spec.model_cls
+        config_cls = self.train_spec.config_cls
+        model_config = config_cls.from_pretrained(job_config.training_model_config_path,
+                                                  attn_implementation="flex_attention")
+        model_config.return_dict = False  # NOTE: for compatibility with pipeline parallel
+        self.use_flex_attention = model_config._attn_implementation == "flex_attention"
+        if self.use_flex_attention:
+            job_config.training_compile = False  # TODO(xcsong): support flex_attention with torch.compile
+
         # build dataloader
-        tokenizer = self.train_spec.build_tokenizer_fn(tokenizer_config)
+        tokenizer = self.train_spec.build_tokenizer_fn(
+            tokenizer_config,
+            bos_token=model_config.bos_token,
+            eos_token=model_config.eos_token,
+            pad_token=model_config.pad_token,
+        )
+        assert model_config.vocab_size == tokenizer.vocab_size
+        assert model_config.bos_token_id == tokenizer.bos
+        assert model_config.eos_token_id == tokenizer.eos
         self.dataloader = self.train_spec.build_dataloader_fn(
             tokenizer_config=tokenizer_config,
             data_config=data_config,
@@ -130,18 +148,6 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         )
 
         # build model (using meta init)
-        model_cls = self.train_spec.model_cls
-        config_cls = self.train_spec.config_cls
-        model_config = config_cls.from_pretrained(job_config.training_model_config_path,
-                                                  attn_implementation="flex_attention")
-        model_config.return_dict = False  # NOTE: for compatibility with pipeline parallel
-        self.use_flex_attention = model_config._attn_implementation == "flex_attention"
-        if self.use_flex_attention:
-            job_config.training_compile = False  # TODO(xcsong): support flex_attention with torch.compile
-        assert model_config.vocab_size == tokenizer.vocab_size
-        assert model_config.bos_token_id == tokenizer.bos
-        assert model_config.eos_token_id == tokenizer.eos
-
         logger.info(
             f"Building {self.train_spec.name} with {model_config}"
         )

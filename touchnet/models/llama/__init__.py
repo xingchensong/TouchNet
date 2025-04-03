@@ -85,7 +85,7 @@ def accuracy(pred: torch.Tensor, labels: torch.Tensor,
 
     """
     if isinstance(pred, DTensor):
-        pred = pred.to_loacl()  # (B, T//cp, V//tp) -> (B, T, V)
+        pred = pred.to_local()  # (B, T//cp, V//tp) -> (B, T, V)
     pred = torch.argmax(pred, dim=-1)  # (B, T, V) -> (B, T)
     mask = labels != ignore_index
     numerator = torch.sum(
