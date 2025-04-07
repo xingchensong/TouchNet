@@ -43,7 +43,8 @@ param_dtype="bfloat16"
 
 seed=2025
 model_config=config/Llama-3.2.json
-exp_id="aishell_1x16384_fullac_cp2_tp2_dp2_pp1_stack7_stride6_flex_packloss_fromscratch_small_ar_std0.02_acc_norm_wp12k_add"
+# exp_id="aishell_1x4096_fullac_cp1_tp1_dp8_pp1_stack7_stride6_flex_packloss_fromscratch_mid_ar_std0.02_acc_normpreproc_wp2k_addpad"
+exp_id="aishell_1x16384_fullac_cp2_tp2_dp2_pp1_stack7_stride6_flex_packloss_fromscratch_mid_ar_std0.02_acc_normpreproc_wp2k_addpad"
 cp=$(echo $exp_id | grep -oP 'cp\d+' | grep -oP '\d+')
 tp=$(echo $exp_id | grep -oP 'tp\d+' | grep -oP '\d+')
 dp=$(echo $exp_id | grep -oP 'dp\d+' | grep -oP '\d+')
@@ -167,9 +168,10 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --audiofeat_num_mel_bins 80 \
       --audiofeat_frame_length 25 \
       --audiofeat_frame_shift 10 \
-      --audiofeat_dither 0.1 \
+      --audiofeat_dither 0.0 \
       --audiofeat_stack_length ${stack} \
       --audiofeat_stride_length ${stride} \
+      --audiofeat_normalize true \
       --dataloader_num_workers ${num_workers} \
       --dataloader_prefetch_factor ${prefetch} \
       --training_description "aishell asr" \
@@ -212,7 +214,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --optimizer_lr 8e-4 \
       --optimizer_impl "fused" \
       --lr_scheduler_steps 72000 \
-      --lr_scheduler_warmup_steps 12000 \
+      --lr_scheduler_warmup_steps 2000 \
       --lr_scheduler_decay_type "linear" \
       --lr_scheduler_lr_min 0.0
 fi
