@@ -17,7 +17,6 @@ class LlamaForASR(LlamaForCausalLM):
 
     def __init__(self, config: LlamaForASRConfig):
         super().__init__(config)
-        self.audio_norm = torch.nn.LayerNorm(config.input_size)
         self.projector = torch.nn.Linear(config.input_size, config.hidden_size, bias=False)
 
         # Initialize weights and apply final processing
@@ -62,8 +61,8 @@ class LlamaForASR(LlamaForCausalLM):
         assert inputs_embeds is not None  # (B, T, D)
 
         # NOTE(xcsong): This is the only difference between LlamaForASR and LlamaForCausalLM
-        inputs_embeds_audio = self.projector(self.audio_norm(inputs_embeds))  # (B, T // sp, D),  sp == tp
-        inputs_embeds_text = self.model.embed_tokens(input_ids)  # (B, T // sp, D), sp == tp
+        inputs_embeds_audio = self.projector(inputs_embeds)  # (B, T // sp // cp, D),  sp == tp
+        inputs_embeds_text = self.model.embed_tokens(input_ids)  # (B, T // sp // cp, D), sp == tp
 
         inputs_embeds = inputs_embeds_audio + inputs_embeds_text
         if torch.isnan(inputs_embeds).any():

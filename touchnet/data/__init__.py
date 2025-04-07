@@ -409,6 +409,14 @@ class DataConfig:
             )
         },
     )
+    audiofeat_normalize: bool = field(
+        default=True,
+        metadata={
+            "help": (
+                "normalize stacked feat to stablize training."
+            )
+        },
+    )
     dataloader_num_workers: int = field(
         default=6,
         metadata={

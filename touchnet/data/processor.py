@@ -277,6 +277,9 @@ def audiofeat_stack(data, config: DataConfig):
                            + (T_lfr - 1 + last_idx) * config.audiofeat_stride_length) / 2 * (T_lfr - last_idx)
             inputs = torch.vstack([inputs] + [inputs[-1:]] * int(num_padding))
         outputs = inputs.as_strided(sizes, strides)
+        if config.audiofeat_normalize:
+            outputs = (outputs - outputs.mean(dim=-1, keepdim=True)) / \
+                      (outputs.std(dim=-1, keepdim=True) + 1e-5)
         sample["audiofeat"] = outputs.clone().type(torch.float32)  # [T // stride, D * stack]
         yield sample
 
@@ -312,7 +315,7 @@ def batch_pairaudio_pairtext(data, config: DataConfig, tokenizer: BaseTokenizer)
     assert config.dataset_audio_seqlen == config.dataset_text_seqlen
     buffer = {
         "input_ids": torch.zeros([config.dataset_batchsize,
-                                  config.dataset_text_seqlen], dtype=torch.int64) + tokenizer.eos,
+                                  config.dataset_text_seqlen], dtype=torch.int64) + tokenizer.pad,
         "inputs_embeds": torch.zeros([config.dataset_batchsize, config.dataset_audio_seqlen,
                                       config.audiofeat_num_mel_bins * config.audiofeat_stack_length],
                                      dtype=torch.float32),
@@ -341,7 +344,7 @@ def batch_pairaudio_pairtext(data, config: DataConfig, tokenizer: BaseTokenizer)
                 # reset buffer for next batch
                 buffer = {
                     "input_ids": torch.zeros([config.dataset_batchsize,
-                                              config.dataset_text_seqlen], dtype=torch.int64) + tokenizer.eos,
+                                              config.dataset_text_seqlen], dtype=torch.int64) + tokenizer.pad,
                     "inputs_embeds": torch.zeros([config.dataset_batchsize, config.dataset_audio_seqlen,
                                                   config.audiofeat_num_mel_bins * config.audiofeat_stack_length],
                                                  dtype=torch.float32),
@@ -404,7 +407,7 @@ def batch_text(data, config: DataConfig, tokenizer: BaseTokenizer):
     """
     buffer = {
         "input_ids": torch.zeros([config.dataset_batchsize,
-                                  config.dataset_text_seqlen], dtype=torch.int64) + tokenizer.eos,
+                                  config.dataset_text_seqlen], dtype=torch.int64) + tokenizer.pad,
         "inputs_embeds": None,
         "labels": torch.zeros([config.dataset_batchsize,
                                config.dataset_text_seqlen], dtype=torch.int64) - 100,  # ignore_idx = -100
@@ -427,7 +430,7 @@ def batch_text(data, config: DataConfig, tokenizer: BaseTokenizer):
                 # reset buffer for next batch
                 buffer = {
                     "input_ids": torch.zeros([config.dataset_batchsize,
-                                              config.dataset_text_seqlen], dtype=torch.int64) + tokenizer.eos,
+                                              config.dataset_text_seqlen], dtype=torch.int64) + tokenizer.pad,
                     "inputs_embeds": None,
                     "labels": torch.zeros([config.dataset_batchsize,
                                            config.dataset_text_seqlen], dtype=torch.int64) - 100,
