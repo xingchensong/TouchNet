@@ -115,8 +115,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         # build model_config
         model_cls = self.train_spec.model_cls
         config_cls = self.train_spec.config_cls
-        model_config = config_cls.from_pretrained(job_config.training_model_config_path,
-                                                  attn_implementation="flex_attention")
+        model_config = config_cls.from_json_file(job_config.training_model_config_path)
         model_config.return_dict = False  # NOTE: for compatibility with pipeline parallel
         self.use_flex_attention = model_config._attn_implementation == "flex_attention"
         if self.use_flex_attention:
@@ -133,14 +132,14 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         assert model_config.bos_token_id == tokenizer.bos
         assert model_config.eos_token_id == tokenizer.eos
         self.dataloader = self.train_spec.build_dataloader_fn(
-            tokenizer_config=tokenizer_config,
+            tokenizer=tokenizer,
             data_config=data_config,
             dp_rank=dp_rank,
             dp_world_size=dp_world_size,
             split='train',
         )
         self.dataloader_dev = self.train_spec.build_dataloader_fn(
-            tokenizer_config=tokenizer_config,
+            tokenizer=tokenizer,
             data_config=data_config,
             dp_rank=dp_rank,
             dp_world_size=dp_world_size,
