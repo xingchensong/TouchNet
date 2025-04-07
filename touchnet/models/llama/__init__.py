@@ -21,7 +21,18 @@ def cross_entropy_loss(
     sentence_lens: torch.Tensor, num_sentence: int,
     ignore_index: int = -100,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Common cross-entropy loss function for Transformer models training."""
+    """Common cross-entropy loss function for Transformer models training.
+
+    Args:
+        pred (Tensor): Prediction tensors (B, Lmax // cp, Vocab // tp) if pred.to_local()
+                       else (B, Lmax // cp, Vocab) if pred.full_tensor()
+        labels (LongTensor): Target label tensors (B, Lmax // cp).
+        ignore_index (int): Ignore label id.
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]: Loss value.
+    """
+
     if isinstance(pred, DTensor):
         # NOTE(xcsong): make sentence_lens distributed to work with DTensor-style Loss
         sentence_lens = DTensor.from_local(
@@ -29,7 +40,6 @@ def cross_entropy_loss(
         )  # (bs, seq_len // cp)
     batch_size = pred.size(0)
     num_tokens = (labels != ignore_index).sum().item()
-    # logits.shape = pred.shape = (bs, seq_len // cp, vocab_size // tp)
     loss = torch.nn.functional.cross_entropy(
         pred.flatten(0, 1).float(), labels.flatten(0, 1),
         reduction="none", ignore_index=ignore_index,
@@ -49,6 +59,8 @@ def cross_entropy_loss(
 
 
 def post_init(model: LlamaForCausalLM, init_device: torch.device):
+    """Post-initialization function for LlamaForCausalLM and LlamaForASR."""
+
     # NOTE(xcsong): Init rope and norm.weight
     inv_freq, attention_scaling = model.model.rotary_emb.rope_init_fn(
         model.model.rotary_emb.config, device=init_device)
@@ -62,9 +74,7 @@ def post_init(model: LlamaForCausalLM, init_device: torch.device):
         assert isinstance(layer.post_attention_layernorm, LlamaRMSNorm)
         torch.nn.init.ones_(layer.input_layernorm.weight)
         torch.nn.init.ones_(layer.post_attention_layernorm.weight)
-    # NOTE(xcsong): Init norm.weight for ASR
-    if hasattr(model, 'audio_norm'):
-        model.audio_norm.reset_parameters()
+
     # NOTE(xcsong): Do some NaN check
     for name, param in model.named_parameters():
         if torch.isnan(param).any() or torch.isinf(param).any():
@@ -76,8 +86,9 @@ def accuracy(pred: torch.Tensor, labels: torch.Tensor,
     """Calculate accuracy.
 
     Args:
-        pred (Tensor): Prediction tensors (B, Lmax, Vocab).
-        labels (LongTensor): Target label tensors (B, Lmax).
+        pred (Tensor): Prediction tensors (B, Lmax // cp, Vocab // tp) if pred.to_local()
+                       else (B, Lmax // cp, Vocab) if pred.full_tensor()
+        labels (LongTensor): Target label tensors (B, Lmax // cp).
         ignore_index (int): Ignore label id.
 
     Returns:
@@ -85,8 +96,8 @@ def accuracy(pred: torch.Tensor, labels: torch.Tensor,
 
     """
     if isinstance(pred, DTensor):
-        pred = pred.to_local()  # (B, T//cp, V//tp) -> (B, T, V)
-    pred = torch.argmax(pred, dim=-1)  # (B, T, V) -> (B, T)
+        pred = pred.full_tensor()  # (B, T // cp, V)
+    pred = pred.argmax(dim=-1)  # (B, T // cp, V) -> (B, T // cp)
     mask = labels != ignore_index
     numerator = torch.sum(
         pred.masked_select(mask) == labels.masked_select(mask))

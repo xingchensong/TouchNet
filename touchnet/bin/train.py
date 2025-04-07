@@ -459,7 +459,8 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                     position_ids=data["position_ids"],
                     attention_mask=data["sentence_ids"] if self.use_flex_attention else None,
                 )
-                # logits.shape = pred[0].shape = (bs, seq_len // cp, vocab_size // tp)
+                # logits.shape = pred[0].shape = (bs, seq_len // cp, vocab_size // tp) if logits.to_local()
+                #                           else (bs, seq_len // cp, vocab_size) if logits.full_tensor()
                 loss_per_sample, loss_per_token = self.train_spec.loss_fn(
                     pred[0], data["labels"], data["sentence_lens"], data["num_sentence"])  # (1,), (1,)
                 acc = self.train_spec.acc_fn(pred[0], data["labels"])
@@ -574,7 +575,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                     position_ids=data["position_ids"],
                     attention_mask=data["sentence_ids"] if self.use_flex_attention else None,
                 )
-                # logits.shape = pred[0].shape = (bs, seq_len // cp, vocab_size // tp)
+                # logits.shape = pred[0].shape = (bs, seq_len // cp, vocab_size)
                 loss_per_sample, loss_per_token = self.train_spec.loss_fn(
                     pred[0], data["labels"], data["sentence_lens"], data["num_sentence"])  # (1,), (1,)
                 acc = self.train_spec.acc_fn(pred[0], data["labels"])
