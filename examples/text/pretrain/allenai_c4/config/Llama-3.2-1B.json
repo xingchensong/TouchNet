@@ -4,6 +4,7 @@
   ],
   "attention_bias": false,
   "attention_dropout": 0.0,
+  "attn_implementation": "flex_attention",
   "bos_token_id": 128000,
   "eos_token_id": 128009,
   "bos_token": "<|begin_of_text|>",
