@@ -102,7 +102,10 @@ def accuracy(pred: torch.Tensor, labels: torch.Tensor,
     numerator = torch.sum(
         pred.masked_select(mask) == labels.masked_select(mask))
     denominator = torch.sum(mask)
-    return (numerator / denominator).detach()
+    if denominator > 0:
+        return (numerator / denominator).detach()
+    else:
+        return torch.zeros_like(numerator).detach()
 
 
 def get_num_flop_per_token(num_params: int, model_config: LlamaConfig, seq_len: int) -> int:
