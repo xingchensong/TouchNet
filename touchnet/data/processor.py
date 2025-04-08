@@ -378,7 +378,7 @@ def batch_pairaudio_pairtext(data, config: DataConfig, tokenizer: BaseTokenizer)
         buffer["num_sentence"] += 1
         cur_audio_idx += total_len
         cur_sentence_idx += 1
-    if cur_batch_idx > 0 or cur_audio_idx > 0:
+    if (not config.dataloader_drop_last_batch) and (cur_batch_idx > 0 or cur_audio_idx > 0):
         yield buffer
 
 
@@ -461,5 +461,5 @@ def batch_text(data, config: DataConfig, tokenizer: BaseTokenizer):
         buffer["num_sentence"] += 1
         cur_text_idx += text_len
         cur_sentence_idx += 1
-    if cur_text_idx > 0 or cur_batch_idx > 0:
+    if (not config.dataloader_drop_last_batch) and (cur_text_idx > 0 or cur_batch_idx > 0):
         yield buffer

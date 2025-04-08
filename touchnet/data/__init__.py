@@ -417,6 +417,14 @@ class DataConfig:
             )
         },
     )
+    dataloader_drop_last_batch: bool = field(
+        default=True,
+        metadata={
+            "help": (
+                "drop last batch as it might contain too much padding values."
+            )
+        },
+    )
     dataloader_num_workers: int = field(
         default=6,
         metadata={
