@@ -179,6 +179,10 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             f" total parameters (wo emb) ({model_param_count_wo_emb/1000000000.0:4f} B){color.reset}"
         )
         logger.info(model)
+        self.metrics_processor.logger.add_hparams([
+            model_config.to_dict(), asdict(job_config),
+            asdict(tokenizer_config), asdict(data_config),
+        ])
 
         # move sharded model to CPU/GPU and initialize weights via DTensor
         if job_config.training_create_seed_ckpt:

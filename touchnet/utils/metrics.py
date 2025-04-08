@@ -9,7 +9,7 @@ import subprocess
 import time
 from collections import namedtuple
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import torch
 from torch.utils.tensorboard import SummaryWriter
@@ -18,6 +18,19 @@ from touchnet.bin import TrainConfig
 from touchnet.utils.distributed import ParallelDims, device_module, device_type
 from touchnet.utils.logging import Color, logger
 from touchnet.utils.optimizer import LRSchedulersContainer, OptimizersContainer
+
+
+def flatten_config(config, parent_key=''):
+    items = []
+    for k, v in config.items():
+        new_key = f"{parent_key}.{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_config(v, new_key).items())
+        elif isinstance(v, list):
+            items.append((new_key, str(v)))
+        else:
+            items.append((new_key, v))
+    return dict(items)
 
 
 def get_num_params(model: torch.nn.Module, exclude_embedding: bool = False) -> int:
@@ -158,6 +171,18 @@ class BaseLogger:
     def close(self) -> None:
         pass
 
+    def add_hparams(self, hparam_dict: List[Dict]) -> None:
+        """Add a set of hyperparameters to be compared in TensorBoard.
+
+        Args:
+            hparam_dict: Each key-value pair in the dictionary is the
+              name of the hyper parameter and it's corresponding value.
+              The type of the value can be one of `bool`, `string`, `float`,
+              `int`, or `None`.
+
+        """
+        pass
+
 
 class TensorBoardLogger(BaseLogger):
     """Logger implementation for TensorBoard."""
@@ -174,6 +199,15 @@ class TensorBoardLogger(BaseLogger):
 
     def close(self) -> None:
         self.writer.close()
+
+    def add_hparams(self, hparam_dict: List[Dict]) -> None:
+        final_dict = {}
+        for conf in hparam_dict:
+            final_dict.update(flatten_config(conf))
+        self.writer.add_hparams(
+            hparam_dict=final_dict,
+            metric_dict={},
+        )
 
 
 class WandBLogger(BaseLogger):
