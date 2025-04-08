@@ -19,6 +19,37 @@ class TokenizerConfig:
             "help": ("type of tokenizer."),
             "choices": [
                 "HuggingFaceTokenizer",
+                "BestRQTokenizer",
+            ],
+        },
+    )
+    tokenizer_bestrq_vocab_size: int = field(
+        default=None,
+        metadata={
+            "help": ("vocab_size of best-rq random codebook."),
+        },
+    )
+    tokenizer_bestrq_input_size: int = field(
+        default=None,
+        metadata={
+            "help": ("input_size of best-rq random quantizer."),
+        },
+    )
+    tokenizer_bestrq_emb_size: int = field(
+        default=None,
+        metadata={
+            "help": ("output_size of best-rq random quantizer."),
+        },
+    )
+    tokenizer_bestrq_init_method: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "Initialization method of best-rq random quantizer and codebook.\n",
+                "    default: xavier_uniform for quantizer and normal for codebook.\n",
+            ),
+            "choices": [
+                "default",
             ],
         },
     )
