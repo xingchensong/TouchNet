@@ -265,7 +265,7 @@ class BestRQTokenizer(BaseTokenizer):
     @property
     def vocab_size(self):
         self._build_quantizer_and_codebook()
-        return self._quantizer.size(0)
+        return self._codebook.size(1)
 
     @property
     def vocab(self):
@@ -287,7 +287,7 @@ class BestRQTokenizer(BaseTokenizer):
     def tokenize(self, inputs, **kwargs):
         self._build_quantizer_and_codebook()
         # get nearest embedding
-        xs = torch.matmul(inputs, self._quantizer.to(xs.device))
+        xs = torch.matmul(inputs, self._quantizer.to(inputs.device))
         xs = xs / (xs.norm(dim=-1, p=2, keepdim=True) + 1e-8)  # [T, D]
         distance = (
             # [T, D] --> [T, 1]

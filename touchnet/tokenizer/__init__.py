@@ -24,25 +24,25 @@ class TokenizerConfig:
         },
     )
     tokenizer_bestrq_vocab_size: int = field(
-        default=None,
+        default=8192,
         metadata={
             "help": ("vocab_size of best-rq random codebook."),
         },
     )
     tokenizer_bestrq_input_size: int = field(
-        default=None,
+        default=560,
         metadata={
             "help": ("input_size of best-rq random quantizer."),
         },
     )
     tokenizer_bestrq_emb_size: int = field(
-        default=None,
+        default=16,
         metadata={
             "help": ("output_size of best-rq random quantizer."),
         },
     )
     tokenizer_bestrq_init_method: str = field(
-        default=None,
+        default="default",
         metadata={
             "help": (
                 "Initialization method of best-rq random quantizer and codebook.\n",
