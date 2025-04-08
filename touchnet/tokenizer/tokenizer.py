@@ -295,7 +295,7 @@ class BestRQTokenizer(BaseTokenizer):
             # [T, D] @ [D, Vocab] --> [T, Vocab]
             2 * torch.matmul(xs, self._codebook.to(xs.device)) +
             # [1, Vocab]
-            self._codebook_magnitude
+            self._codebook_magnitude.to(xs.device)
         )
         codes = torch.argmin(distance, dim=-1)  # [T,]
         return codes
