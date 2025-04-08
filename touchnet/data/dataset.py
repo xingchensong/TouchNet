@@ -211,7 +211,7 @@ class IndexReader(object):
 
     def __init__(self, idx_path: str) -> None:
 
-        logger.info(f"Load the {type(self).__name__} from {idx_path}")
+        logger.debug(f"Load the {type(self).__name__} from {idx_path}")
 
         with open(idx_path, "rb") as stream:
             header = stream.read(9)
@@ -232,15 +232,15 @@ class IndexReader(object):
         self.bin_buffer_mmap = numpy.memmap(idx_path, mode="r", order="C")
         self.bin_buffer = memoryview(self.bin_buffer_mmap)
 
-        logger.info("\tExtract the sequence lengths")
+        logger.debug("\tExtract the sequence lengths")
         t_beg = time.time()
         self.sequence_lengths = numpy.frombuffer(
             self.bin_buffer, dtype=numpy.int32, count=self.sequence_count, offset=offset
         )
         t_end = time.time()
-        logger.info(f"\t> time elapsed: {t_end - t_beg:4f} seconds")
+        logger.debug(f"\t> time elapsed: {t_end - t_beg:4f} seconds")
 
-        logger.info("\tExtract the sequence pointers")
+        logger.debug("\tExtract the sequence pointers")
         t_beg = time.time()
         self.sequence_pointers = numpy.frombuffer(
             self.bin_buffer,
@@ -249,9 +249,9 @@ class IndexReader(object):
             offset=offset + self.sequence_lengths.nbytes,
         )
         t_end = time.time()
-        logger.info(f"\t> time elapsed: {t_end - t_beg:4f} seconds")
+        logger.debug(f"\t> time elapsed: {t_end - t_beg:4f} seconds")
 
-        logger.info("\tExtract the document indices")
+        logger.debug("\tExtract the document indices")
         t_beg = time.time()
         self.document_indices = numpy.frombuffer(
             self.bin_buffer,
@@ -262,14 +262,14 @@ class IndexReader(object):
             + self.sequence_pointers.nbytes,
         )
         t_end = time.time()
-        logger.info(f"\t> time elapsed: {t_end - t_beg:4f} seconds")
+        logger.debug(f"\t> time elapsed: {t_end - t_beg:4f} seconds")
 
         assert self.sequence_lengths.shape[0] == len(self)
         assert self.sequence_lengths.shape[0] == self.sequence_count
         assert self.sequence_lengths.shape[0] == self.document_indices[-1]
 
-        logger.info(f"> total number of sequences: {len(self)}")
-        logger.info(
+        logger.debug(f"> total number of sequences: {len(self)}")
+        logger.debug(
             f"> total number of documents: {self.document_indices.shape[0] - 1}",
         )
 
