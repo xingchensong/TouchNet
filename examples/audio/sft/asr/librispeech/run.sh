@@ -32,19 +32,19 @@ num_nodes=1
 
 job_id=2026
 
-hf_data_repo="AISHELL/AISHELL-1"
+hf_data_repo="openslr/librispeech_asr"
 hf_data_name="default"
 
-train_set=train
-dev_set=dev
-test_sets=test
+train_set=train_960
+dev_set="dev dev_clean dev_other"
+test_sets="test_clean test_other"
 
 param_dtype="bfloat16"
 
 seed=2025
 model_config=config/Llama-3.2.json
-# exp_id="aishell_1x4096_fullac_cp1_tp1_dp8_pp1_stack7_stride6_flex_packloss_fromscratch_mid_ar_std0.02_acc_normpreproc_wp2k_total20k_addpad"
-exp_id="aishell_1x16384_fullac_cp2_tp2_dp2_pp1_stack7_stride6_flex_packloss_fromscratch_mid_ar_std0.02_acc_normpreproc_wp2k_total20k_addpad"
+# exp_id="librispeech_1x4096_fullac_cp1_tp1_dp8_pp1_stack7_stride6_flex_packloss_fromscratch_mid_ar_std0.02_acc_normpreproc_wp12k_addpad"
+exp_id="librispeech_1x16384_fullac_cp2_tp2_dp2_pp1_stack7_stride6_flex_packloss_fromscratch_mid_ar_std0.02_acc_normpreproc_wp12k_addpad"
 cp=$(echo $exp_id | grep -oP 'cp\d+' | grep -oP '\d+')
 tp=$(echo $exp_id | grep -oP 'tp\d+' | grep -oP '\d+')
 dp=$(echo $exp_id | grep -oP 'dp\d+' | grep -oP '\d+')
@@ -68,7 +68,7 @@ prefetch=6
 
 if [ ${stage} -le -1 ] && [ ${stop_stage} -ge -1 ]; then
   echo "$0: stage -1: Data Download"
-  python download_aishell.py
+  python download_librispeech.py
 fi
 
 # TODO(xcsong): character based chinese tokenizer? like CosyVoice2.
@@ -79,9 +79,9 @@ if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
       mkdir -p data/${x}
       python touchnet/bin/make_data.py \
           --save_dir "data/${x}" \
-          --jsonl_path "/bucket/output/jfs-hdfs/user/Archive/OpenSourceDataset/ASR/aishell/recipe/data/${x}/data.list.raw" \
+          --jsonl_path "/bucket/output/jfs-hdfs/user/Archive/ASR/testset/universal_scienceTrainTest/librispeech.raw/list/${x}.data.list.raw" \
           --num_utt_per_shard 2000 \
-          --num_workers 16 \
+          --num_workers 32 \
           --datatypes "audio+metainfo"
     fi
   done
@@ -137,7 +137,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --tokenizer_type "HuggingFaceTokenizer" \
       --datapipe_type "audio+metainfo" \
       --datalist_path "data/${train_set}/data.list" \
-      --datalist_dev_path "data/${dev_set}/data.list" \
+      --datalist_dev_path "data/dev/data.list" \
       --datalist_sharding true \
       --datalist_epoch 10000 \
       --datalist_shuffling true \
@@ -174,7 +174,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --audiofeat_normalize true \
       --dataloader_num_workers ${num_workers} \
       --dataloader_prefetch_factor ${prefetch} \
-      --training_description "aishell asr" \
+      --training_description "librispeech asr" \
       --training_seed "${seed}" \
       --training_model_name "llama.asr" \
       --training_model_config_path "${model_config}" \
@@ -189,9 +189,9 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --training_pipeline_parallel_schedule "1F1B" \
       --training_enable_ckpt true \
       --training_ckpt_load_step -1 \
-      --training_ckpt_interval 100 \
+      --training_ckpt_interval 2000 \
       --training_ckpt_keep_latest_k 2 \
-      --training_log_freq 1 \
+      --training_log_freq 100 \
       --training_enable_tensorboard true \
       --training_save_tb_folder "tensorboard" \
       --training_tb_rank_0_only true \
@@ -199,7 +199,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --training_mixed_precision_reduce "float32" \
       --training_compile true \
       --training_enable_compiled_autograd false \
-      --training_gc_freq 500 \
+      --training_gc_freq 1000 \
       --training_deterministic false \
       --training_max_norm 5.0 \
       --training_activation_checkpoint_mode "full" \
@@ -213,8 +213,8 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --optimizer_name "AdamW" \
       --optimizer_lr 8e-4 \
       --optimizer_impl "fused" \
-      --lr_scheduler_steps 20000 \
-      --lr_scheduler_warmup_steps 2000 \
+      --lr_scheduler_steps 72000 \
+      --lr_scheduler_warmup_steps 12000 \
       --lr_scheduler_decay_type "linear" \
       --lr_scheduler_lr_min 0.0
 fi
