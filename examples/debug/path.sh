@@ -20,7 +20,7 @@ export CUDA_BIN_PATH=$CUDA_HOME
 export CUDA_PATH=$CUDA_HOME
 export CUDA_INC_PATH=$CUDA_HOME/targets/x86_64-linux
 export CFLAGS=-I$CUDA_HOME/targets/x86_64-linux/include:$CFLAGS
-export CXXFLAGS=-I$CUDA_HOME/targets/x86_64-linux/include:$CFLAGS
+export CXXFLAGS=-I$CUDA_HOME/targets/x86_64-linux/include:$CXXFLAGS
 export LDFLAGS=-L$CUDA_HOME/lib64:$CUDA_HOME/lib64/stubs:/usr/lib:/usr/lib64:$LDFLAGS
 export CUDAToolkit_TARGET_DIR=$CUDA_HOME/targets/x86_64-linux
 
