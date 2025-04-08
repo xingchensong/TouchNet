@@ -24,7 +24,8 @@ OptimizersBuilder: TypeAlias = Callable[
     [list[nn.Module], TrainConfig], OptimizersContainer
 ]
 LRSchedulersBuilder: TypeAlias = Callable[[OptimizersContainer], LRSchedulersContainer]
-LossFunction: TypeAlias = Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
+LossFunction: TypeAlias = Callable[..., torch.Tensor]
+AccFunction: TypeAlias = Callable[..., torch.Tensor]
 DataLoaderBuilder: TypeAlias = Callable[..., BaseDataLoader]
 TokenizerBuilder: TypeAlias = Callable[..., BaseTokenizer]
 MetricsProcessorBuilder: TypeAlias = Callable[..., MetricsProcessor]
@@ -44,6 +45,7 @@ class TrainSpec:
     build_dataloader_fn: DataLoaderBuilder
     build_tokenizer_fn: TokenizerBuilder
     loss_fn: LossFunction
+    acc_fn: AccFunction
     additional_post_init_fn: Callable[[nn.Module, torch.device], None]
     get_num_flop_per_token_fn: Callable[[int, AutoConfig, int], int]
     build_metrics_processor_fn: Optional[MetricsProcessorBuilder] = None

@@ -13,8 +13,9 @@ from torch.utils.data import IterableDataset
 from torchdata.stateful_dataloader import StatefulDataLoader
 
 from touchnet.data import DataConfig
-from touchnet.data.datapipe import texttoken_datapipe
-from touchnet.tokenizer import TokenizerConfig
+from touchnet.data.datapipe import (audio_and_metainfo_datapipe,
+                                    texttoken_datapipe)
+from touchnet.tokenizer.tokenizer import BaseTokenizer
 from touchnet.utils.logging import logger
 
 
@@ -102,7 +103,8 @@ class ParallelAwareDataloader(StatefulDataLoader, BaseDataLoader):
         return max(epoch_for_every_worker)
 
 
-def build_dataloader(data_config: DataConfig, tokenizer_config: TokenizerConfig,
+def build_dataloader(data_config: DataConfig,
+                     tokenizer: BaseTokenizer,
                      dp_rank: int, dp_world_size: int,
                      split: Literal['train', 'dev', 'test']) -> BaseDataLoader:
     """Builds a dataloader."""
@@ -126,9 +128,15 @@ def build_dataloader(data_config: DataConfig, tokenizer_config: TokenizerConfig,
             data_config.datalist_epoch = 1
             data_config.datalist_path = data_config.datalist_test_path
 
-    # TODO(xcsong): support more datapipe?
-    datapipe = texttoken_datapipe(data_config, tokenizer_config,
-                                  dp_rank, dp_world_size)
+    if data_config.datapipe_type == "texttoken":
+        datapipe = texttoken_datapipe(data_config, tokenizer,
+                                      dp_rank, dp_world_size)
+    elif data_config.datapipe_type == "audio+metainfo":
+        datapipe = audio_and_metainfo_datapipe(data_config, tokenizer,
+                                               dp_rank, dp_world_size)
+    else:
+        raise NotImplementedError(f"Unsupported datapipe type: {data_config.datapipe_type}.")
+
     dataloader = ParallelAwareDataloader(
         dataset=datapipe,
         dp_rank=dp_rank,

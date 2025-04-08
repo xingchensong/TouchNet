@@ -8,6 +8,17 @@ class DataConfig:
 
     _argument_group_name = "data"
 
+    datapipe_type: str = field(
+        default="texttoken",
+        metadata={
+            "help": (
+                "type of datapipe: "
+                "- 'texttoken': extract text token offline and save to *.bin "
+                "- 'audio+metainfo': save wav and text to *.bin, extract text token online during training"
+            ),
+            "choices": ["texttoken", "audio+metainfo"],
+        },
+    )
     datalist_path: str = field(
         default=None,
         metadata={
@@ -395,6 +406,22 @@ class DataConfig:
         metadata={
             "help": (
                 "number of frames to stride."
+            )
+        },
+    )
+    audiofeat_normalize: bool = field(
+        default=True,
+        metadata={
+            "help": (
+                "normalize stacked feat to stablize training."
+            )
+        },
+    )
+    dataloader_drop_last_batch: bool = field(
+        default=True,
+        metadata={
+            "help": (
+                "drop last batch as it might contain too much padding values."
             )
         },
     )
