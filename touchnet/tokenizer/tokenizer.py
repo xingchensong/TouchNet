@@ -41,7 +41,7 @@ class BaseTokenizer(ABC):
 
     @abstractmethod
     def tokenize(self, inputs: Any) -> Union[numpy.ndarray, torch.Tensor]:
-        """Convert text to embedding ids
+        """Convert text/audio/video to embedding ids
 
         Args:
             inputs (Any): The text/audio/video to convert
@@ -52,7 +52,7 @@ class BaseTokenizer(ABC):
         pass
 
     def detokenize(self, ids: Union[numpy.ndarray, torch.Tensor]) -> Any:
-        """Convert embedding ids to text
+        """Convert embedding ids to text/audio/video
 
         Args:
             ids (numpy.ndarray/torch.Tensor): The ids to convert
@@ -252,8 +252,9 @@ class BestRQTokenizer(BaseTokenizer):
             )
             if self.config.tokenizer_bestrq_init_method == "default":
                 # default initialization follows best-rq https://arxiv.org/pdf/2202.01855
-                torch.nn.init.xavier_uniform_(self._quantizer)
-                torch.nn.init.normal_(self._codebook)
+                g = torch.Generator().manual_seed(self.config.tokenizer_bestrq_init_seed)
+                torch.nn.init.xavier_uniform_(self._quantizer, generator=g)
+                torch.nn.init.normal_(self._codebook, generator=g)
             else:
                 raise NotImplementedError(
                     f"Initialization method {self.config.tokenizer_bestrq_init_method} is not implemented."

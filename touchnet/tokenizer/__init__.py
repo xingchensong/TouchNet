@@ -41,6 +41,12 @@ class TokenizerConfig:
             "help": ("output_size of best-rq random quantizer."),
         },
     )
+    tokenizer_bestrq_init_seed: int = field(
+        default=2026,
+        metadata={
+            "help": ("generator seed for best-rq random quantizer/codebook."),
+        },
+    )
     tokenizer_bestrq_init_method: str = field(
         default="default",
         metadata={
