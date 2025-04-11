@@ -23,7 +23,7 @@ import torchaudio
 import torchaudio.compliance.kaldi as kaldi
 
 from touchnet.data import DataConfig
-from touchnet.tokenizer.tokenizer import BaseTokenizer
+from touchnet.tokenizer.tokenizer import BaseTokenizer, BestRQTokenizer
 
 torchaudio.utils.sox_utils.set_buffer_size(16500)
 
@@ -283,6 +283,96 @@ def audiofeat_stack(data, config: DataConfig):
                       (outputs.std(dim=-1, keepdim=True) + 1e-5)
         sample["audiofeat"] = outputs.clone().type(torch.float32)  # [T // stride, D * stack]
         yield sample
+
+
+def batch_audio(data, config: DataConfig, tokenizer: BestRQTokenizer):
+    """ Feeding the data into buffer for training.
+        We generate attention_mask inside Model.forward().
+        Memory assumption:
+            dataset_batchsize = 16
+            dataset_audio_seqlen = 131072 (2^17)
+            audiofeat_stack_length = 4
+            audiofeat_num_mel_bins = 128
+        Then we got:
+            inputs_embeds: [16, 131072, 128 * 4] = 16 * 131072 * 512 * 4Bytes / 1024 / 1024 = 4096MB
+            labels: [16, 131072] = 16 * 131072 * 8Bytes / 1024 / 1024 = 16MB
+            position_ids: [16, 131072] = 16 * 131072 * 8Bytes / 1024 / 1024 = 16MB
+                example position_ids for packed sequence:
+                    [[0, 1, 2, 0, 1, 2, 0],
+                     [0, 1, 0, 1, 2, 0, 1]]
+            sentence_ids: [16, 131072] = 16 * 131072 * 8Bytes / 1024 / 1024 = 16MB
+                example sentence_ids for packed sequence: start from 1, ignore_idx == 0
+                    [[1, 1, 1, 2, 2, 2, 0],
+                     [1, 1, 2, 2, 2, 3, 3]]
+            sentence_lens: [16, 131072] = 16 * 131072 * 8Bytes / 1024 / 1024 = 16MB
+                example sentence_lens for packed sequence:
+                    [[3, 3, 3, 3, 3, 3, 0],
+                     [2, 2, 3, 3, 3, 2, 2]]
+        So the total memory cost is around 4140MB.
+    """
+    buffer = {
+        "input_ids": None,
+        "inputs_embeds": torch.zeros([config.dataset_batchsize, config.dataset_audio_seqlen,
+                                      config.audiofeat_num_mel_bins * config.audiofeat_stack_length],
+                                     dtype=torch.float32),
+        "labels": torch.zeros([config.dataset_batchsize,
+                               config.dataset_audio_seqlen], dtype=torch.int64) - 100,  # ignore_idx = -100
+        "position_ids": torch.zeros([config.dataset_batchsize,
+                                     config.dataset_audio_seqlen], dtype=torch.int64),
+        "sentence_ids": torch.zeros([config.dataset_batchsize,
+                                     config.dataset_audio_seqlen], dtype=torch.int64),
+        "sentence_lens": torch.ones([config.dataset_batchsize,
+                                     config.dataset_audio_seqlen], dtype=torch.int64),
+        "num_sentence": 0,
+    }
+    cur_batch_idx = 0
+    cur_audio_idx = 0
+    cur_sentence_idx = 1
+    for sample in data:
+        audio_len = sample['audiofeat'].size(0)
+        if audio_len > config.dataset_audio_seqlen:
+            continue
+        if cur_batch_idx == config.dataset_batchsize - 1:
+            if cur_audio_idx + audio_len > config.dataset_audio_seqlen:
+                yield buffer
+                # reset buffer for next batch
+                buffer = {
+                    "input_ids": None,
+                    "inputs_embeds": torch.zeros([config.dataset_batchsize, config.dataset_audio_seqlen,
+                                                  config.audiofeat_num_mel_bins * config.audiofeat_stack_length],
+                                                 dtype=torch.float32),
+                    "labels": torch.zeros([config.dataset_batchsize,
+                                           config.dataset_audio_seqlen], dtype=torch.int64) - 100,  # ignore_idx = -100
+                    "position_ids": torch.zeros([config.dataset_batchsize,
+                                                 config.dataset_audio_seqlen], dtype=torch.int64),
+                    "sentence_ids": torch.zeros([config.dataset_batchsize,
+                                                 config.dataset_audio_seqlen], dtype=torch.int64),
+                    "sentence_lens": torch.ones([config.dataset_batchsize,
+                                                 config.dataset_audio_seqlen], dtype=torch.int64),
+                    "num_sentence": 0,
+                }
+                cur_batch_idx = 0
+                cur_audio_idx = 0
+                cur_sentence_idx = 1
+        else:
+            if cur_audio_idx + audio_len > config.dataset_audio_seqlen:
+                cur_batch_idx += 1
+                cur_audio_idx = 0
+                cur_sentence_idx = 1
+        labels = tokenizer.tokenize(sample['audiofeat'])
+        assert len(labels) == audio_len
+        buffer["inputs_embeds"][cur_batch_idx, cur_audio_idx:cur_audio_idx + audio_len] = sample['audiofeat']
+        buffer["labels"][cur_batch_idx, cur_audio_idx:cur_audio_idx + audio_len] = \
+            torch.tensor(labels[1:] + [-100], dtype=torch.int64)  # just ignore the last output
+        buffer["position_ids"][cur_batch_idx, cur_audio_idx:cur_audio_idx + audio_len] = torch.arange(
+            0, audio_len, dtype=torch.int64)
+        buffer["sentence_ids"][cur_batch_idx, cur_audio_idx:cur_audio_idx + audio_len] = cur_sentence_idx
+        buffer["sentence_lens"][cur_batch_idx, cur_audio_idx:cur_audio_idx + audio_len] = audio_len
+        buffer["num_sentence"] += 1
+        cur_audio_idx += audio_len
+        cur_sentence_idx += 1
+    if (not config.dataloader_drop_last_batch) and (cur_batch_idx > 0 or cur_audio_idx > 0):
+        yield buffer
 
 
 def batch_pairaudio_pairtext(data, config: DataConfig, tokenizer: BaseTokenizer):

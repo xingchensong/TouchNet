@@ -246,9 +246,8 @@ def audio_and_metainfo_datapipe(
 
     if isinstance(tokenizer, BestRQTokenizer):
         # audio pretrain
-        datapipe = Processor(datapipe, processor.audiofeat_quantize, data_config,
+        datapipe = Processor(datapipe, processor.batch_audio, data_config,
                              tokenizer)
-        datapipe = Processor(datapipe, processor.batch_audio, data_config)
     else:
         # audio sft, like asr or tts
         datapipe = Processor(datapipe, processor.batch_pairaudio_pairtext, data_config,

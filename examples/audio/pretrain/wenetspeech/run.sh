@@ -134,6 +134,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
   echo "$0: num_nodes is $num_nodes, proc_per_node is $num_gpus"
   # export TORCH_LOGS="+dynamo"
   # export TORCHDYNAMO_VERBOSE=1
+  # FIXME(xcsong): Where to apply specaug ??? before quantize or after quantize
   torchrun --nnodes=$num_nodes --nproc_per_node=$num_gpus \
            --rdzv_id=$job_id --rdzv_backend="c10d" --rdzv_endpoint=$HOST_NODE_ADDR \
            --local-ranks-filter "0" \
@@ -150,6 +151,9 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --datalist_sharding true \
       --datalist_epoch 10000 \
       --datalist_shuffling true \
+      --dataset_random_cut_audio true \
+      --dataset_random_cut_audio_min_length_in_ms 5000 \
+      --dataset_random_cut_audio_max_length_in_ms 3600000 \
       --dataset_shuffling true \
       --dataset_mmap true \
       --dataset_batchsize ${bs} \
@@ -164,7 +168,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --audio_resample_rate 16000 \
       --audio_speed_perturb true \
       --audio_feat_type "fbank" \
-      --audiofeat_spec_aug true \
+      --audiofeat_spec_aug false \
       --audiofeat_spec_aug_num_t_mask 2 \
       --audiofeat_spec_aug_num_f_mask 2 \
       --audiofeat_spec_aug_max_t 50 \

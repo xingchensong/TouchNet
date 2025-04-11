@@ -6,11 +6,11 @@
   "input_size": 560,
   "attention_bias": false,
   "attention_dropout": 0.0,
-  "bos_token_id": 128000,
-  "eos_token_id": 128009,
-  "bos_token": "<|begin_of_text|>",
-  "eos_token": "<|eot_id|>",
-  "pad_token": "<|finetune_right_pad_id|>",
+  "bos_token_id": null,
+  "eos_token_id": null,
+  "bos_token": null,
+  "eos_token": null,
+  "pad_token": null,
   "head_dim": 64,
   "hidden_act": "silu",
   "hidden_size": 256,
@@ -35,5 +35,5 @@
   "tie_word_embeddings": false,
   "torch_dtype": "bfloat16",
   "use_cache": false,
-  "vocab_size": 128256
+  "vocab_size": 8192
 }
