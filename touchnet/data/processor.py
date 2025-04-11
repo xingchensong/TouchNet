@@ -39,11 +39,13 @@ def text_tokenize(data, tokenizer: BaseTokenizer):
             Dict[{key, waveform, input_ids, sample_rate}]
     """
     for sample in data:
-        assert 'txt' in sample
-        # NOTE(xcsong): add bos/eos in batch_xxx()
-        input_ids = tokenizer.tokenize(sample['txt'], add_special_tokens=False)
-        sample['input_ids'] = input_ids
-        yield sample
+        if 'txt' in sample:
+            # NOTE(xcsong): add bos/eos in batch_xxx()
+            input_ids = tokenizer.tokenize(sample['txt'], add_special_tokens=False)
+            sample['input_ids'] = input_ids
+            yield sample
+        else:
+            yield sample  # do nothing
 
 
 def filter(data, config: DataConfig):
@@ -117,7 +119,6 @@ def audio_compute_fbank(data, config: DataConfig):
     for sample in data:
         assert 'sample_rate' in sample
         assert 'waveform' in sample
-        assert 'input_ids' in sample
         sample_rate = sample['sample_rate']
         waveform = sample['waveform']
         waveform = waveform * (1 << 15)
