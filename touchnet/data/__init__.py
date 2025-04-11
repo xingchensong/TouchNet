@@ -108,7 +108,7 @@ class DataConfig:
         },
     )
     dataset_random_cut_audio: bool = field(
-        default=True,
+        default=False,
         metadata={
             "help": (
                 "Randomly cut audio in audio pretraining mode."

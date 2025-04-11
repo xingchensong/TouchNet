@@ -151,7 +151,7 @@ class TouchDatapipe(IterableDataset, Stateful):
                                 g = torch.Generator()
                                 g.manual_seed(self.epoch + self.consumed_lists + self.consumed_samples)
                                 length = torch.randint(
-                                    low=min_length, high=min(total_length, max_length),
+                                    low=int(min_length), high=min(total_length, int(max_length)),
                                     size=(1,), generator=g).item()
                                 offset = torch.randint(
                                     low=0, high=max(1, total_length - length),
