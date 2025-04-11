@@ -10,6 +10,7 @@ from typing import Any, Union
 
 import numpy
 import torch
+import torch.nn.functional as F
 import transformers
 
 from touchnet.tokenizer import TokenizerConfig
@@ -246,8 +247,8 @@ class BestRQTokenizer(BaseTokenizer):
                 requires_grad=False,
             )
             self._codebook = torch.nn.parameter.Parameter(
-                torch.empty(self.config.tokenizer_bestrq_emb_size,
-                            self.config.tokenizer_bestrq_vocab_size),
+                torch.empty(self.config.tokenizer_bestrq_vocab_size,
+                            self.config.tokenizer_bestrq_emb_size),
                 requires_grad=False,
             )
             if self.config.tokenizer_bestrq_init_method == "default":
@@ -259,14 +260,12 @@ class BestRQTokenizer(BaseTokenizer):
                 raise NotImplementedError(
                     f"Initialization method {self.config.tokenizer_bestrq_init_method} is not implemented."
                 )
-            self._codebook /= self._codebook.norm(dim=0, p=2, keepdim=True) + 1e-8
-            self._codebook_magnitude = torch.sum(self._codebook**2, 0, keepdim=True)
-            self._id2emb = self._codebook.transpose(0, 1)
+            self._codebook = F.normalize(self._codebook, dim=1, p=2, eps=1e-8)
 
     @property
     def vocab_size(self):
         self._build_quantizer_and_codebook()
-        return self._codebook.size(1)
+        return self._codebook.size(0)
 
     @property
     def vocab(self):
@@ -278,32 +277,28 @@ class BestRQTokenizer(BaseTokenizer):
     def inv_vocab(self):
         """Dictionary from vocab id token to emb token."""
         self._build_quantizer_and_codebook()
-        return self._id2emb
+        return self._codebook
 
     @property
     def decoder(self):
         self._build_quantizer_and_codebook()
-        return self._id2emb
+        return self._codebook
 
     def tokenize(self, inputs, **kwargs):
         self._build_quantizer_and_codebook()
         # get nearest embedding
         xs = torch.matmul(inputs, self._quantizer.to(inputs.device))
-        xs = xs / (xs.norm(dim=-1, p=2, keepdim=True) + 1e-8)  # [T, D]
-        distance = (
-            # [T, D] --> [T, 1]
-            torch.sum(xs**2, -1, keepdim=True) -
-            # [T, D] @ [D, Vocab] --> [T, Vocab]
-            2 * torch.matmul(xs, self._codebook.to(xs.device)) +
-            # [1, Vocab]
-            self._codebook_magnitude.to(xs.device)
-        )
-        codes = torch.argmin(distance, dim=-1)  # [T,]
+        xs = F.normalize(xs, dim=-1, p=2, eps=1e-8)  # [T, D]
+        codes = torch.linalg.vector_norm(
+            # [T, 1, D] - [1, V, D] -> [T, V, D]
+            xs.unsqueeze(1) - self._codebook.unsqueeze(0),
+            dim=-1, ord=2,
+        ).argmin(dim=-1)  # [T,]
         return codes
 
     def detokenize(self, token_ids, **kwargs):
         self._build_quantizer_and_codebook()
-        return torch.index_select(self._id2emb, dim=0, index=token_ids)
+        return torch.index_select(self._codebook, dim=0, index=token_ids)
 
     @property
     def eos(self):
