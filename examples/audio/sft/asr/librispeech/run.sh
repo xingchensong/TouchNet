@@ -43,8 +43,9 @@ param_dtype="bfloat16"
 
 seed=2025
 model_config=config/Llama-3.2.json
-# exp_id="librispeech_1x4096_fullac_cp1_tp1_dp8_pp1_stack7_stride6_flex_packloss_fromscratch_mid_ar_std0.02_acc_normpreproc_wp12k_addpad"
-exp_id="librispeech_1x16384_fullac_cp2_tp2_dp2_pp1_stack7_stride6_flex_packloss_fromscratch_mid_ar_std0.02_acc_normpreproc_wp12k_addpad"
+exp_id="librispeech_1x4096_fullac_cp1_tp1_dp8_pp1_stack7_stride6_flex_packloss_fromscratch_mid_ar_std0.02_acc_normpreproc_wp2k_total260k_addpad"
+# exp_id="librispeech_1x16384_fullac_cp4_tp1_dp2_pp1_stack7_stride6_flex_packloss_fromscratch_mid_ar_std0.02_acc_normpreproc_wp2k_total260k_addpad"
+# exp_id="librispeech_1x16384_fullac_cp2_tp2_dp2_pp1_stack7_stride6_flex_packloss_fromscratch_mid_ar_std0.02_acc_normpreproc_wp2k_total260k_addpad"
 cp=$(echo $exp_id | grep -oP 'cp\d+' | grep -oP '\d+')
 tp=$(echo $exp_id | grep -oP 'tp\d+' | grep -oP '\d+')
 dp=$(echo $exp_id | grep -oP 'dp\d+' | grep -oP '\d+')
@@ -131,7 +132,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
   # export TORCHDYNAMO_VERBOSE=1
   torchrun --nnodes=$num_nodes --nproc_per_node=$num_gpus \
            --rdzv_id=$job_id --rdzv_backend="c10d" --rdzv_endpoint=$HOST_NODE_ADDR \
-           --local-ranks-filter "0,4" \
+           --local-ranks-filter "0" \
     touchnet/bin/train.py \
       --tokenizer_model "${pretrained_tokenizer_dir}" \
       --tokenizer_type "HuggingFaceTokenizer" \
@@ -213,8 +214,8 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --optimizer_name "AdamW" \
       --optimizer_lr 8e-4 \
       --optimizer_impl "fused" \
-      --lr_scheduler_steps 72000 \
-      --lr_scheduler_warmup_steps 12000 \
+      --lr_scheduler_steps 260000 \
+      --lr_scheduler_warmup_steps 2000 \
       --lr_scheduler_decay_type "linear" \
       --lr_scheduler_lr_min 0.0
 fi
