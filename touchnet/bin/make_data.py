@@ -182,18 +182,6 @@ def build_texttoken(
     builders["texttoken"].finalize(f"{path_prefix}/texttoken.idx")
 
 
-def build_audio(
-    chunk: List[str],
-    path_prefix: str,
-    cur_chunk: int,
-    num_chunks: int,
-    conf: MakeDataConfig,
-    *args,
-    **kwargs,
-):
-    pass
-
-
 def build_audio_and_metainfo(
     chunk: List[str],
     path_prefix: str,
