@@ -26,8 +26,8 @@ class DataConfig:
                 "list of dataset, each line is a prefix path to a `TouchDataset`. "
                 "e.g. `head -2 /mnt/data/data.list`\n"
                 "```\n"
-                "/mnt/data/aishell1\n"
-                "/mnt/data/aishell2\n"
+                "/mnt/data/aishell1 audio+metainfo\n"
+                "/mnt/data/aishell2 audio+metainfo\n"
                 "```\n"
             )
         },
@@ -39,8 +39,8 @@ class DataConfig:
                 "list of dataset, each line is a prefix path to a `TouchDataset`. "
                 "e.g. `head -2 /mnt/data/data.list`\n"
                 "```\n"
-                "/mnt/data/aishell1\n"
-                "/mnt/data/aishell2\n"
+                "/mnt/data/aishell1 audio+metainfo\n"
+                "/mnt/data/aishell2 audio+metainfo\n"
                 "```\n"
             )
         },
@@ -52,8 +52,8 @@ class DataConfig:
                 "list of dataset, each line is a prefix path to a `TouchDataset`. "
                 "e.g. `head -2 /mnt/data/data.list`\n"
                 "```\n"
-                "/mnt/data/aishell1\n"
-                "/mnt/data/aishell2\n"
+                "/mnt/data/aishell1 audio+metainfo\n"
+                "/mnt/data/aishell2 audio+metainfo\n"
                 "```\n"
             )
         },
@@ -99,11 +99,39 @@ class DataConfig:
             )
         },
     )
+    dataset_load_audio_via_segments: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Load audio based on segments info. False means load full audio."
+            )
+        },
+    )
     dataset_random_cut_audio: bool = field(
-        default=True,
+        default=False,
         metadata={
             "help": (
                 "Randomly cut audio in audio pretraining mode."
+            )
+        },
+    )
+    dataset_random_cut_audio_min_length_in_ms: int = field(
+        default=5000,
+        metadata={
+            "help": (
+                "We only cut audio that is longer than this value. ",
+                "For audio that is shorter than this value, we keep ",
+                "them untouched. Default is 5s."
+            )
+        },
+    )
+    dataset_random_cut_audio_max_length_in_ms: int = field(
+        default=3600000,
+        metadata={
+            "help": (
+                "The maximum length of the cutting result. This is to avoid getting too long audio. ",
+                "We should adjust this value according to `audio_max_length_in_ms_for_filter` ",
+                "and `dataset_*_seqlen`. Default is 1 hour."
             )
         },
     )

@@ -293,7 +293,7 @@ class BestRQTokenizer(BaseTokenizer):
             # [T, 1, D] - [1, V, D] -> [T, V, D]
             xs.unsqueeze(1) - self._codebook.unsqueeze(0),
             dim=-1, ord=2,
-        ).argmin(dim=-1)  # [T,]
+        ).argmin(dim=-1).tolist()  # [T,]
         return codes
 
     def detokenize(self, token_ids, **kwargs):
@@ -303,17 +303,17 @@ class BestRQTokenizer(BaseTokenizer):
     @property
     def eos(self):
         self._build_quantizer_and_codebook()
-        return -1
+        return None
 
     @property
     def bos(self):
         self._build_quantizer_and_codebook()
-        return -1
+        return None
 
     @property
     def pad(self):
         self._build_quantizer_and_codebook()
-        return -1
+        return None
 
 
 def build_tokenizer(args: TokenizerConfig, **kwargs):

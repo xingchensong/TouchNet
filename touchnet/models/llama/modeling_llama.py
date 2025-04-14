@@ -57,14 +57,17 @@ class LlamaForASR(LlamaForCausalLM):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         assert labels is None  # we calculate loss in train-loop
-        assert input_ids is not None  # (B, T)
         assert inputs_embeds is not None  # (B, T, D)
 
         # NOTE(xcsong): This is the only difference between LlamaForASR and LlamaForCausalLM
         inputs_embeds_audio = self.projector(inputs_embeds)  # (B, T // sp // cp, D),  sp == tp
-        inputs_embeds_text = self.model.embed_tokens(input_ids)  # (B, T // sp // cp, D), sp == tp
 
-        inputs_embeds = inputs_embeds_audio + inputs_embeds_text
+        if input_ids:
+            inputs_embeds_text = self.model.embed_tokens(input_ids)  # (B, T // sp // cp, D), sp == tp
+            inputs_embeds = inputs_embeds_audio + inputs_embeds_text
+        else:
+            inputs_embeds = inputs_embeds_audio
+
         if torch.isnan(inputs_embeds).any():
             raise ValueError("NaN in data.")
 

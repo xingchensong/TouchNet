@@ -8,10 +8,9 @@ from torch.utils.data import IterableDataset
 
 from touchnet.data import DataConfig, processor
 from touchnet.data.dataset import TouchDataset
-from touchnet.tokenizer.tokenizer import BaseTokenizer
+from touchnet.tokenizer.tokenizer import BaseTokenizer, BestRQTokenizer
 
 
-# TODO(xcsong): is_build_on_rank
 class TouchDatapipe(IterableDataset, Stateful):
     """The high-level interface dataset class
 
@@ -102,17 +101,8 @@ class TouchDatapipe(IterableDataset, Stateful):
                         # for text pre-training
                         texttoken = _dataset.get(sample_idx, "texttoken").tolist()
                         yield dict(input_ids=texttoken, datatypes="texttoken")
-                    elif self.lists[list_idx]["datatypes"] == "audio":
-                        # for audio pre-training
-                        if self.config.dataset_random_cut_audio:
-                            audio_p, audio_l = _dataset.get_idx(sample_idx, "audio")
-                            # TODO(xcsong): slice audio
-                            pass
-                        else:
-                            audio = _dataset.get(sample_idx, "audio")
-                        yield dict(audio=audio, datatypes="audio")
                     elif self.lists[list_idx]["datatypes"] == "audio+metainfo":
-                        # for audio-text alignment
+                        # for audio pre-training OR audio-text alignment
                         """NOTE(xcsong) Example metainfo:
                         {
                             "key": "BAC009S0002W0122",
@@ -137,7 +127,8 @@ class TouchDatapipe(IterableDataset, Stateful):
                         length = None
                         sample_rate = metainfo["sample_rate"]
                         info = metainfo.get("info", None)
-                        if info is not None:
+                        if info is not None and self.config.dataset_load_audio_via_segments:
+                            # used in audio sft, like asr or tts
                             segments = info.get("segments", None)
                             # TODO(xcsong): Add arg to control segment selection
                             if segments is not None:
@@ -149,6 +140,21 @@ class TouchDatapipe(IterableDataset, Stateful):
                                 offset = start
                                 length = end - start
                                 metainfo['txt'] = segment['txt']
+                        if self.config.dataset_random_cut_audio:
+                            # used in audio pretrain
+                            _, total_length = _dataset.get_idx(sample_idx, "audio")
+                            min_length = self.config.dataset_random_cut_audio_min_length_in_ms / 1000.0 * sample_rate
+                            max_length = self.config.dataset_random_cut_audio_max_length_in_ms / 1000.0 * sample_rate
+                            assert max_length > min_length
+                            if total_length > min_length:
+                                g = torch.Generator()
+                                g.manual_seed(self.epoch + self.consumed_lists + self.consumed_samples)
+                                length = torch.randint(
+                                    low=int(min_length), high=min(total_length, int(max_length)),
+                                    size=(1,), generator=g).item()
+                                offset = torch.randint(
+                                    low=0, high=max(1, total_length - length),
+                                    size=(1,), generator=g).item()
                         audio = _dataset.get(sample_idx, "audio", offset=offset, length=length)
                         audio = audio.astype(numpy.float32) / 32768.0  # normalize to [-1.0, 1.0]
                         metainfo["waveform"] = torch.from_numpy(audio).unsqueeze(0)  # [1, T]
@@ -209,9 +215,10 @@ def audio_and_metainfo_datapipe(
     """
     datapipe = TouchDatapipe(data_config, dp_rank, dp_world_size)
 
-    datapipe = Processor(datapipe, processor.text_tokenize, tokenizer)
-    datapipe = Processor(datapipe, processor.filter, data_config)
+    if not isinstance(tokenizer, BestRQTokenizer):
+        datapipe = Processor(datapipe, processor.text_tokenize, tokenizer)
 
+    datapipe = Processor(datapipe, processor.filter, data_config)
     datapipe = Processor(datapipe, processor.audio_resample, data_config)
 
     # wav-level augment
@@ -234,14 +241,19 @@ def audio_and_metainfo_datapipe(
     if data_config.audiofeat_spec_trim:
         datapipe = Processor(datapipe, processor.audiofeat_spec_trim, data_config)
 
+    # feat-level stack & stride
     datapipe = Processor(datapipe, processor.audiofeat_stack, data_config)
-    datapipe = Processor(datapipe, processor.batch_pairaudio_pairtext, data_config,
-                         tokenizer)
+
+    if isinstance(tokenizer, BestRQTokenizer):
+        # audio pretrain
+        datapipe = Processor(datapipe, processor.batch_audio, data_config,
+                             tokenizer)
+    else:
+        # audio sft, like asr or tts
+        datapipe = Processor(datapipe, processor.batch_pairaudio_pairtext, data_config,
+                             tokenizer)
     return datapipe
 
-
-def audio_datapipe():
-    pass
 
 def texttoken_datapipe(
     data_config: DataConfig,
@@ -253,6 +265,3 @@ def texttoken_datapipe(
     datapipe = Processor(datapipe, processor.filter, data_config)
     datapipe = Processor(datapipe, processor.batch_text, data_config, tokenizer)
     return datapipe
-
-def audiotoken_datapipe():
-    pass
