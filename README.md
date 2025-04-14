@@ -1,6 +1,6 @@
 <div align="center">
 
-# TouchNet
+# TouchNet [WIP]
 
 #### A PyTorch native 4-D parallel library for large-scale multimodel LLM (text/audio/video) training
 
@@ -10,14 +10,17 @@
 
 </div>
 
-`touchnet` is currently in a pre-release state and under extensive development.
+## Overview
 
-**Feature Highlights:**
+`touchnet` is a clean, minimal codebase for large-scale Multimodal LLM training using native PyTorch. It is currently in a pre-release state and under extensive development.
 
-- 🚀 Minimal, easy-to-use, extensible training framework
-- 🤗 Seamless integration with `transformers`
-- 🔄 Efficient data preprocessing: random access, blazing fast IO
-- 🔮 4D parallelism
+Our guiding principles when building `touchnet`:
+
+- ⚡️ Blazing-fast checkpointable data loader with modular preprocessing & ​**​full random access​**​ for ultra-large scale multimodal data
+- 🤗 Native integration with `transformers` ecosystem.
+- 🛠️ Built-in profilers (CPU/GPU/memory) with flight recorder diagnostics.
+- 🎯 4-D parallelism enabled through minimal lines of model code changes.
+- ✨ Intuitive API design for rapid adoption & customization in minutes.
 
 ## Installation
 
@@ -40,7 +43,7 @@ pip install -r requirements.txt
 
 ```
 @misc{touchnet,
-  title={TouchNet: A PyTorch native 4-D parallel library for large-scale multimodel LLM (text/audio/video) training},
+  title={TouchNet: A PyTorch native 4-D parallel library for large-scale multimodal LLM (text/audio/video) training},
   author={Xingchen Song},
   year={2025},
   url={https://github.com/xingchensong/TouchNet},
@@ -49,4 +52,6 @@ pip install -r requirements.txt
 
 ## Acknowledge
 
-1. We borrowed a lot of code from [torchtitan](https://github.com/pytorch/torchtitan).
+1. This project is highly motivated by [torchtitan](https://github.com/pytorch/torchtitan) and we borrowed a lot of code from it.
+
+Thanks for their wonderful works.
