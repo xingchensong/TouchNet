@@ -43,8 +43,7 @@ param_dtype="bfloat16"
 
 seed=2026
 model_config=config/Llama-3.2.json
-exp_id="wenetspeech_1x8192_fullac_cp1_tp1_dp8_pp1_stack7_stride6_flex_packloss_fromscratch_mid_ar_std0.02_acc_normpreproc_wp12k_addpad"
-# exp_id="wenetspeech_1x16384_fullac_cp2_tp2_dp2_pp1_stack7_stride6_flex_packloss_fromscratch_mid_ar_std0.02_acc_normpreproc_wp12k_addpad"
+exp_id="wenetspeech_1x8192_fullac_cp1_tp1_dp8_pp1_stack5_stride4_flex_packloss_fromscratch_mid_ar_std0.02_acc_normpreproc_wp12k_addpad_cb1024_emb16_pretrain"
 cp=$(echo $exp_id | grep -oP 'cp\d+' | grep -oP '\d+')
 tp=$(echo $exp_id | grep -oP 'tp\d+' | grep -oP '\d+')
 dp=$(echo $exp_id | grep -oP 'dp\d+' | grep -oP '\d+')
@@ -113,7 +112,7 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
            --rdzv_id=$job_id --rdzv_backend="c10d" --rdzv_endpoint=$HOST_NODE_ADDR \
     touchnet/bin/train.py \
       --tokenizer_type "BestRQTokenizer" \
-      --tokenizer_bestrq_vocab_size 8192 \
+      --tokenizer_bestrq_vocab_size 1024 \
       --tokenizer_bestrq_input_size $(expr $stack \* $num_mel_bins) \
       --tokenizer_bestrq_emb_size 16 \
       --tokenizer_bestrq_init_seed ${seed} \
@@ -140,7 +139,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
            --local-ranks-filter "0" \
     touchnet/bin/train.py \
       --tokenizer_type "BestRQTokenizer" \
-      --tokenizer_bestrq_vocab_size 8192 \
+      --tokenizer_bestrq_vocab_size 1024 \
       --tokenizer_bestrq_input_size $(expr $stack \* $num_mel_bins) \
       --tokenizer_bestrq_emb_size 16 \
       --tokenizer_bestrq_init_seed ${seed} \
@@ -151,7 +150,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --datalist_sharding true \
       --datalist_epoch 10000 \
       --datalist_shuffling true \
-      --dataset_random_cut_audio true \
+      --dataset_random_cut_audio false \
       --dataset_random_cut_audio_min_length_in_ms 5000 \
       --dataset_random_cut_audio_max_length_in_ms 3600000 \
       --dataset_shuffling true \
@@ -204,7 +203,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --training_ckpt_load_step -1 \
       --training_ckpt_interval 2000 \
       --training_ckpt_keep_latest_k 2 \
-      --training_log_freq 100 \
+      --training_log_freq 1 \
       --training_enable_tensorboard true \
       --training_save_tb_folder "tensorboard" \
       --training_tb_rank_0_only true \

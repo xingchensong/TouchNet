@@ -3,7 +3,7 @@
     "LlamaForASR"
   ],
   "attn_implementation": "flex_attention",
-  "input_size": 560,
+  "input_size": 400,
   "attention_bias": false,
   "attention_dropout": 0.0,
   "bos_token_id": null,
@@ -35,5 +35,5 @@
   "tie_word_embeddings": false,
   "torch_dtype": "bfloat16",
   "use_cache": false,
-  "vocab_size": 8192
+  "vocab_size": 1024
 }

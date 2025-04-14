@@ -11,7 +11,6 @@ from touchnet.data.dataset import TouchDataset
 from touchnet.tokenizer.tokenizer import BaseTokenizer, BestRQTokenizer
 
 
-# TODO(xcsong): is_build_on_rank
 class TouchDatapipe(IterableDataset, Stateful):
     """The high-level interface dataset class
 
@@ -216,9 +215,10 @@ def audio_and_metainfo_datapipe(
     """
     datapipe = TouchDatapipe(data_config, dp_rank, dp_world_size)
 
-    datapipe = Processor(datapipe, processor.text_tokenize, tokenizer)
-    datapipe = Processor(datapipe, processor.filter, data_config)
+    if not isinstance(tokenizer, BestRQTokenizer):
+        datapipe = Processor(datapipe, processor.text_tokenize, tokenizer)
 
+    datapipe = Processor(datapipe, processor.filter, data_config)
     datapipe = Processor(datapipe, processor.audio_resample, data_config)
 
     # wav-level augment
@@ -265,6 +265,3 @@ def texttoken_datapipe(
     datapipe = Processor(datapipe, processor.filter, data_config)
     datapipe = Processor(datapipe, processor.batch_text, data_config, tokenizer)
     return datapipe
-
-def audiotoken_datapipe():
-    pass
