@@ -12,12 +12,40 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import torch
+from torch.distributed.tensor import DTensor
 from torch.utils.tensorboard import SummaryWriter
 
 from touchnet.bin import TrainConfig
 from touchnet.utils.distributed import ParallelDims, device_module, device_type
 from touchnet.utils.logging import Color, logger
 from touchnet.utils.optimizer import LRSchedulersContainer, OptimizersContainer
+
+
+def accuracy(pred: torch.Tensor, labels: torch.Tensor,
+             ignore_index: int = -100) -> torch.Tensor:
+    """Calculate accuracy.
+
+    Args:
+        pred (Tensor): Prediction tensors (B, Lmax // cp, Vocab // tp) if pred.to_local()
+                       else (B, Lmax // cp, Vocab) if pred.full_tensor()
+        labels (LongTensor): Target label tensors (B, Lmax // cp).
+        ignore_index (int): Ignore label id.
+
+    Returns:
+        torch.Tensor: Accuracy value (0.0 - 1.0).
+
+    """
+    if isinstance(pred, DTensor):
+        pred = pred.full_tensor()  # (B, T // cp, V)
+    pred = pred.argmax(dim=-1)  # (B, T // cp, V) -> (B, T // cp)
+    mask = labels != ignore_index
+    numerator = torch.sum(
+        pred.masked_select(mask) == labels.masked_select(mask))
+    denominator = torch.sum(mask)
+    if denominator > 0:
+        return (numerator / denominator).detach()
+    else:
+        return torch.zeros_like(numerator).detach()
 
 
 def flatten_config(config, parent_key=''):

@@ -62,7 +62,7 @@ class LlamaForASR(LlamaForCausalLM):
         # NOTE(xcsong): This is the only difference between LlamaForASR and LlamaForCausalLM
         inputs_embeds_audio = self.projector(inputs_embeds)  # (B, T // sp // cp, D),  sp == tp
 
-        if input_ids:
+        if input_ids is not None:
             inputs_embeds_text = self.model.embed_tokens(input_ids)  # (B, T // sp // cp, D), sp == tp
             inputs_embeds = inputs_embeds_audio + inputs_embeds_text
         else:
