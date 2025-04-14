@@ -2,7 +2,7 @@
 
 # TouchNet [WIP]
 
-#### A PyTorch native 4-D parallel library for large-scale multimodel LLM (text/audio/video) training
+#### A PyTorch native 4-D parallel library for large-scale multimodal LLM (text/audio/video) training
 
 [![integration tests](https://github.com/xingchensong/TouchNet/actions/workflows/unit_test_cpu.yaml/badge.svg?branch=main)](https://github.com/xingchensong/TouchNet/actions/workflows/unit_test_cpu.yaml?query=branch%3Amain)
 [![docs](https://img.shields.io/badge/docs-latest-blue.svg)](docs/)
@@ -19,7 +19,9 @@ Our guiding principles when building `touchnet`:
 - ⚡️ Blazing-fast checkpointable data loader with modular preprocessing & ​**​full random access​**​ for ultra-large scale multimodal data
 - 🤗 Native integration with `transformers` ecosystem.
 - 🛠️ Built-in profilers (CPU/GPU/memory) with flight recorder diagnostics.
-- 🎯 4-D parallelism enabled through minimal lines of model code changes.
+  - [Memory Monitor](https://pytorch.org/blog/understanding-gpu-memory-1/)
+- 🎯 4-D parallelism enabled through PyTorch native API and minimal lines of model code changes.
+  - [FSDP2](https://pytorch.org/docs/stable/distributed.fsdp.fully_shard.html), [Tensor Parallel](https://pytorch.org/docs/stable/distributed.tensor.parallel.html), [Pipeline Parallel](https://discuss.pytorch.org/t/distributed-w-torchtitan-training-with-zero-bubble-pipeline-parallelism/214420), [Context Parallel](https://discuss.pytorch.org/t/distributed-w-torchtitan-breaking-barriers-training-long-context-llms-with-1m-sequence-length-in-pytorch-using-context-parallel/215082), [Distributed Checkpoint](https://pytorch.org/docs/stable/distributed.checkpoint.html)
 - ✨ Intuitive API design for rapid adoption & customization in minutes.
 
 ## Installation
