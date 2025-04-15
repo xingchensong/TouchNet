@@ -41,6 +41,10 @@ https://github.com/user-attachments/assets/9e530ad6-2d8d-41b4-9223-8ad7c838e6e4
 
 Loss, Accuracy, GPU memory, throughput (tokens/sec), TFLOPs, and MFU displayed and logged via both stdout and Tensorboard.
 
+https://github.com/user-attachments/assets/78d826e9-6727-4037-8497-d9967c87f277
+
+Detailed training metrics and CPU/GPU profiling that can be visualized in Tensorboard. Enjoy your optimization journey ~
+
 </div>
 
 ## Installation
