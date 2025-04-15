@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import contextlib
+import datetime
 import os
 import pickle
 import time
@@ -27,9 +28,12 @@ def maybe_enable_profiling(config: TrainConfig, *, global_step: int = 0):
     enable_profiling = config.training_enable_profiling
 
     if enable_profiling:
-        dump_dir = config.training_trace_dump_folder
-        save_trace_dir = config.training_profiling_traces_folder
-        trace_dir = os.path.join(dump_dir, save_trace_dir)
+        trace_dir = os.path.join(
+            config.training_trace_dump_folder,
+            config.training_save_tb_folder,
+            datetime.now().strftime("%Y%m%d-%H%M"),
+            config.training_profiling_traces_folder,
+        )
         profile_freq = config.training_profiling_freq
         keep_k = config.training_profiling_keep_first_k
 
@@ -43,7 +47,7 @@ def maybe_enable_profiling(config: TrainConfig, *, global_step: int = 0):
 
             logger.info(f"Dumping profiler traces at step {prof.step_num}")
             begin = time.monotonic()
-            prof.export_chrome_trace(f"{curr_trace_dir}/rank{rank}_trace.json")
+            prof.export_chrome_trace(f"{curr_trace_dir}/rank{rank}.pt.trace.json")
             logger.info(
                 f"Finished dumping profiler traces in {time.monotonic() - begin:.2f} seconds"
             )
