@@ -5,10 +5,10 @@
 # LICENSE file in the root directory of this source tree.
 
 import contextlib
-import datetime
 import os
 import pickle
 import time
+from datetime import datetime
 
 import torch
 
