@@ -11,19 +11,19 @@ authors = [
 keywords = ["pytorch", "training", "llm", "mllm"]
 dependencies = [
     # Hugging Face integrations
-    "datasets>=3.2.0",
-    "transformers>=4.50.3",
-    "tokenizers>=0.21.0",
+    "datasets>=3.5.0",
+    "transformers>=4.51.3",
+    "tokenizers>=0.21.1",
 
     # Torch
     "torch>=2.6.0",
     "torchaudio>=2.6.0",
-    "torchdata>=0.10.1",
-    "torch-tb-profiler",
+    "torchdata>=0.11.0",
+    "torch-tb-profiler>=0.4.3",
 
     # Miscellaneous
     "tomli>=1.1.0",
-    "librosa",
+    "librosa>=0.11.0",
 ]
 dynamic = ["version"]
 
