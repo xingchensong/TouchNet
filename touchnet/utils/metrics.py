@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 import torch
 from torch.distributed.tensor import DTensor
 from torch.utils.tensorboard import SummaryWriter
+from torch.utils.tensorboard.summary import hparams
 
 from touchnet.bin import TrainConfig
 from touchnet.utils.distributed import ParallelDims, device_module, device_type
@@ -232,10 +233,10 @@ class TensorBoardLogger(BaseLogger):
         final_dict = {}
         for conf in hparam_dict:
             final_dict.update(flatten_config(conf))
-        self.writer.add_hparams(
-            hparam_dict=final_dict,
-            metric_dict={},
-        )
+        exp, ssi, sei = hparams(final_dict, {}, None)
+        self.writer.file_writer.add_summary(exp, None)
+        self.writer.file_writer.add_summary(ssi, None)
+        self.writer.file_writer.add_summary(sei, None)
 
 
 class WandBLogger(BaseLogger):
