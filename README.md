@@ -2,7 +2,7 @@
 
 # TouchNet [WIP]
 
-#### A PyTorch native 4-D parallel library for large-scale multimodal LLM (text/audio/video) training
+#### A PyTorch native 4-D parallel library for large-scale multimodal LLM (text/audio) training
 
 [![integration tests](https://github.com/xingchensong/TouchNet/actions/workflows/unit_test_cpu.yaml/badge.svg?branch=main)](https://github.com/xingchensong/TouchNet/actions/workflows/unit_test_cpu.yaml?query=branch%3Amain)
 [![docs](https://img.shields.io/badge/docs-latest-blue.svg)](docs/)
@@ -12,40 +12,57 @@
 
 ## Overview
 
-`touchnet` is a clean, minimal codebase for large-scale Multimodal LLM training using native PyTorch. It is currently in a pre-release state and under extensive development.
+`touchnet` is highly motivated by `torchtitan`. Both of them are clean, minimal codebases for large-scale LLM training using native PyTorch. The main goal that differentiates `touchnet` from `torchtitan` is that `touchnet` focuses on multimodal LLM training where special data pipelines and model structures are needed. Please note that `touchnet` is currently in a pre-release state and under extensive development.
 
-Our guiding principles when building `touchnet`:
+Our guiding principles when building `touchnet` are:
 
-- ⚡️ Blazing-fast checkpointable data loader with modular preprocessing & ​**​full random access​**​ for ultra-large scale multimodal data
-- 🤗 Native integration with `transformers` ecosystem.
-- 🛠️ Built-in profilers (CPU/GPU/memory) with flight recorder diagnostics.
-  - [Memory Monitor](https://pytorch.org/blog/understanding-gpu-memory-1/)
-- 🎯 4-D parallelism enabled through PyTorch native API and minimal lines of model code changes.
-  - [FSDP2](https://pytorch.org/docs/stable/distributed.fsdp.fully_shard.html), [Tensor Parallel](https://pytorch.org/docs/stable/distributed.tensor.parallel.html), [Pipeline Parallel](https://discuss.pytorch.org/t/distributed-w-torchtitan-training-with-zero-bubble-pipeline-parallelism/214420), [Context Parallel](https://discuss.pytorch.org/t/distributed-w-torchtitan-breaking-barriers-training-long-context-llms-with-1m-sequence-length-in-pytorch-using-context-parallel/215082), [Distributed Checkpoint](https://pytorch.org/docs/stable/distributed.checkpoint.html)
-- ✨ Intuitive API design for rapid adoption & customization in minutes.
+1. ⚡️ Blazing-fast checkpointable data loader with modular preprocessing and ​**​fully random access​**​ for large scale **multimodal** data
+    - [[New Storage Format]](https://github.com/xingchensong/TouchNet/blob/main/docs/data.md) optimized for random access on sequentially saved tar files
+    - Efficient [[Sequence Packing]](https://huggingface.co/blog/sirluk/llm-sequence-packing) powered by [[Flex Attention]](https://pytorch.org/docs/main/nn.attention.flex_attention.html#module-torch.nn.attention.flex_attention)
+2. 🤗 Native integration with `transformers` models while get rid of structured trainer classes (e.g., [[PyTorch-Lightning]](https://github.com/Lightning-AI/pytorch-lightning) or [[HuggingFace Trainer]](https://huggingface.co/docs/transformers/v4.50.0/en/main_classes/trainer#transformers.Trainer))
+    - Only reuse model definitions in `transformers` and leave other parts untouched
+    - Entire training logic exposed in a single file [[touchnet/bin/train.py]](https://github.com/xingchensong/TouchNet/blob/main/touchnet/bin/train.py), everything is under your control
+3. 🛠️ Built-in profilers (CPU/GPU/memory) with flight recorder diagnostics.
+    - [[Nsys-like Profiler]](https://github.com/pytorch/kineto/blob/main/tb_plugin/README.md) to get optimization recommendations
+    - [[Memory Monitor]](https://pytorch.org/blog/understanding-gpu-memory-1/) to debug OOM errors and improve memory usage
+4. 🎯 4-D parallelism enabled through **PyTorch native API** and minimal lines of model code changes.
+    - [[FSDP2]](https://pytorch.org/docs/stable/distributed.fsdp.fully_shard.html), [why FSDP1 -> FSDP2?](https://github.com/pytorch/torchtitan/blob/main/docs/fsdp.md)
+    - [[Tensor Parallel]](https://pytorch.org/docs/stable/distributed.tensor.parallel.html), [[Context Parallel]](https://discuss.pytorch.org/t/distributed-w-torchtitan-breaking-barriers-training-long-context-llms-with-1m-sequence-length-in-pytorch-using-context-parallel/215082), [[Pipeline Parallel]](https://discuss.pytorch.org/t/distributed-w-torchtitan-training-with-zero-bubble-pipeline-parallelism/214420) (PP WIP🚧), [[Distributed Checkpoint]](https://pytorch.org/docs/stable/distributed.checkpoint.html)
+5. ✨ Intuitive API design for rapid adoption & customization in minutes.
+    - Supported tasks: [[text/pretrain]](https://github.com/xingchensong/TouchNet/tree/main/examples/text/pretrain), [[audio/pretrain]](https://github.com/xingchensong/TouchNet/tree/main/examples/audio/pretrain), [[audio/sft/asr]](https://github.com/xingchensong/TouchNet/tree/main/examples/audio/sft/asr), more tasks coming soon
+    - Supported models: [[Llama]](https://github.com/xingchensong/TouchNet/tree/main/touchnet/models/llama), more models coming soon
+
+
+## Quick Glance at TouchNet
+
+<div align="center">
+
+https://github.com/user-attachments/assets/9e530ad6-2d8d-41b4-9223-8ad7c838e6e4
+
+Loss, Accuracy, GPU memory, throughput (tokens/sec), TFLOPs, and MFU displayed and logged via both stdout and Tensorboard.
+
+</div>
 
 ## Installation
 
 ```sh
-# NOTE(xcsong): Ensure that the system's glibc version is greater than or equal to 2.17 (see `ldd --version`)
-#               (for example, Ubuntu 20.04 and later versions).
-conda create -n touchnet python=3.10  # megatron_core requires python>=3.10
+# NOTE(xcsong): Ensure that the linux system's glibc version is greater than or equal to 2.17 (see `ldd --version`)
+#               (for example, Ubuntu 22.04 and later versions).
+conda create -n touchnet python=3.10
 conda activate touchnet
-conda install -c conda-forge git vim zsh shellcheck tmux cmake nodejs ruby gawk ctags sox ffmpeg -y
-conda install -c conda-forge gcc=11.4.0 gxx=11.4.0 libstdcxx-devel_linux-64=11.4.0 -y  # transformer_engine requires gcc>=11.4.0
-# install cuda12.6.3+cudnnn9.5.1.17
+conda install -c conda-forge sox ffmpeg -y
+# install cuda12.6.3+cudnnn9.5.1.17, be aware to change `prefix` to your path.
 bash install_cuda_cudnn.sh
-# install python packages
-pip install pynvim neovim jedi autopep8 cpplint pylint isort cmakelint cmake-format flake8 gpustat nvitop
-pip install torch==2.6.0+cu126 torchaudio==2.6.0+cu126 --extra-index-url https://download.pytorch.org/whl/cu126
-pip install -r requirements.txt
+# install the most recent PyTorch to use the latest features of parallelism.
+pip install --pre torch torchaudio --index-url https://download.pytorch.org/whl/nightly/cu126 --force-reinstall
+pip install .
 ```
 
 ## Citation
 
-```
+```txt
 @misc{touchnet,
-  title={TouchNet: A PyTorch native 4-D parallel library for large-scale multimodal LLM (text/audio/video) training},
+  title={TouchNet: A PyTorch native 4-D parallel library for large-scale multimodal LLM (text/audio) training},
   author={Xingchen Song},
   year={2025},
   url={https://github.com/xingchensong/TouchNet},
@@ -54,6 +71,7 @@ pip install -r requirements.txt
 
 ## Acknowledge
 
-1. This project is highly motivated by [torchtitan](https://github.com/pytorch/torchtitan) and we borrowed a lot of code from it.
+1. This repo is highly motivated by [torchtitan](https://github.com/pytorch/torchtitan) and we borrowed a lot of code from it.
+2. This repo also benefits from [Megatron-LM](https://github.com/NVIDIA/Megatron-LM), [WeNet](https://github.com/wenet-e2e/wenet).
 
 Thanks for their wonderful works.
