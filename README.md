@@ -32,6 +32,17 @@ Our guiding principles when building `touchnet` are:
     - Supported tasks: [[text/pretrain]](https://github.com/xingchensong/TouchNet/tree/main/examples/text/pretrain), [[audio/pretrain]](https://github.com/xingchensong/TouchNet/tree/main/examples/audio/pretrain), [[audio/sft/asr]](https://github.com/xingchensong/TouchNet/tree/main/examples/audio/sft/asr), more tasks coming soon
     - Supported models: [[Llama]](https://github.com/xingchensong/TouchNet/tree/main/touchnet/models/llama), more models coming soon
 
+
+## Quick Glance at TouchNet
+
+<div align="center">
+
+https://github.com/user-attachments/assets/9e530ad6-2d8d-41b4-9223-8ad7c838e6e4
+
+Loss, Accuracy, GPU memory, throughput (tokens/sec), TFLOPs, and MFU displayed and logged via both stdout and Tensorboard.
+
+</div>
+
 ## Installation
 
 ```sh
