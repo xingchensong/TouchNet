@@ -1,6 +1,6 @@
 <div align="center">
 
-# TouchNet [WIP]
+# 👆 TouchNet [WIP]
 
 #### A PyTorch native 4-D parallel library for large-scale multimodal LLM (text/audio) training
 
@@ -12,9 +12,9 @@
 
 ## Overview
 
-`touchnet` is highly motivated by `torchtitan`. Both of them are clean, minimal codebases for large-scale LLM training using native PyTorch. The main goal that differentiates `touchnet` from `torchtitan` is that `touchnet` focuses on multimodal LLM training where special data pipelines and model structures are needed. Please note that `touchnet` is currently in a pre-release state and under extensive development.
+`👆 touchnet` is highly motivated by `torchtitan`. Both of them are clean, minimal codebases for large-scale LLM training using native PyTorch. The main goal that differentiates `👆 touchnet` from `torchtitan` is that `👆 touchnet` focuses on multimodal LLM training where special data pipelines and model structures are needed. Please note that `👆 touchnet` is currently in a pre-release state and under extensive development.
 
-Our guiding principles when building `touchnet` are:
+Our guiding principles when building `👆 touchnet` are:
 
 1. ⚡️ Blazing-fast checkpointable data loader with modular preprocessing and ​**​fully random access​**​ for large scale **multimodal** data
     - [[New Storage Format]](https://github.com/xingchensong/TouchNet/blob/main/docs/data.md) optimized for random access on sequentially saved tar files
@@ -33,7 +33,7 @@ Our guiding principles when building `touchnet` are:
     - Supported models: [[Llama]](https://github.com/xingchensong/TouchNet/tree/main/touchnet/models/llama), more models coming soon
 
 
-## Quick Glance at TouchNet
+## Quick Glance at 👆 TouchNet
 
 <div align="center">
 
