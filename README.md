@@ -37,15 +37,15 @@ Our guiding principles when building `touchnet` are:
 
 <div align="center">
 
-<iframe style="width: 100%; height: auto;" src=https://github.com/user-attachments/assets/9e530ad6-2d8d-41b4-9223-8ad7c838e6e4></iframe>
+https://github.com/user-attachments/assets/9e530ad6-2d8d-41b4-9223-8ad7c838e6e4
 
 Loss, Accuracy, Memory, Throughput, TFLOPs, and MFU logged via both stdout and Tensorboard.
 
-<iframe style="width: 100%; height: auto;" src=https://github.com/user-attachments/assets/dc089589-a355-4abc-a2b3-5e0f768b89a0></iframe>
+https://github.com/user-attachments/assets/dc089589-a355-4abc-a2b3-5e0f768b89a0
 
 Detailed CPU/GPU profiling that can be visualized in Tensorboard. Enjoy your optimization journey ~
 
-<iframe style="width: 100%; height: auto;" src=https://github.com/user-attachments/assets/10cbf4ce-5f96-4699-b4f4-72c88ce89802></iframe>
+https://github.com/user-attachments/assets/10cbf4ce-5f96-4699-b4f4-72c88ce89802
 
 Memory profiling identifies GPU memory allocation patterns to guide tuning strategies.
 
