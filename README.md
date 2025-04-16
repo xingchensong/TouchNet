@@ -37,13 +37,17 @@ Our guiding principles when building `touchnet` are:
 
 <div align="center">
 
-https://github.com/user-attachments/assets/9e530ad6-2d8d-41b4-9223-8ad7c838e6e4
+<iframe style="width: 100%; height: auto;" src=https://github.com/user-attachments/assets/9e530ad6-2d8d-41b4-9223-8ad7c838e6e4></iframe>
 
-Loss, Accuracy, GPU memory, throughput (tokens/sec), TFLOPs, and MFU displayed and logged via both stdout and Tensorboard.
+Loss, Accuracy, Memory, Throughput, TFLOPs, and MFU logged via both stdout and Tensorboard.
 
-https://github.com/user-attachments/assets/78d826e9-6727-4037-8497-d9967c87f277
+<iframe style="width: 100%; height: auto;" src=https://github.com/user-attachments/assets/dc089589-a355-4abc-a2b3-5e0f768b89a0></iframe>
 
-Detailed training metrics and CPU/GPU profiling that can be visualized in Tensorboard. Enjoy your optimization journey ~
+Detailed CPU/GPU profiling that can be visualized in Tensorboard. Enjoy your optimization journey ~
+
+<iframe style="width: 100%; height: auto;" src=https://github.com/user-attachments/assets/10cbf4ce-5f96-4699-b4f4-72c88ce89802></iframe>
+
+Memory profiling identifies GPU memory allocation patterns to guide tuning strategies.
 
 </div>
 
@@ -57,7 +61,7 @@ conda activate touchnet
 conda install -c conda-forge sox ffmpeg -y
 # install cuda12.6.3+cudnnn9.5.1.17, be aware to change `prefix` to your path.
 bash install_cuda_cudnn.sh
-# install the most recent PyTorch to use the latest features of parallelism.
+# install the most recent PyTorch to use the latest features of parallelism. recommended torch>=2.7.0
 pip install --pre torch torchaudio --index-url https://download.pytorch.org/whl/nightly/cu126 --force-reinstall
 pip install .
 ```

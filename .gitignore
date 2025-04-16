@@ -188,3 +188,7 @@ examples/*/data/
 examples/*/*/data/
 examples/*/*/*/data/
 examples/*/*/*/*/data/
+examples/*/data
+examples/*/*/data
+examples/*/*/*/data
+examples/*/*/*/*/data
