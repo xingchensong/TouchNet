@@ -11,7 +11,6 @@ from datetime import timedelta
 from typing import Any, Dict, Iterable, Optional
 
 import torch
-import torch.distributed.checkpoint as dcp
 from torch.distributed.device_mesh import DeviceMesh
 from torch.distributed.elastic.multiprocessing.errors import record
 from transformers.hf_argparser import HfArgumentParser
@@ -185,36 +184,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         ])
 
         # move sharded model to CPU/GPU and initialize weights via DTensor
-        if job_config.training_create_seed_ckpt:
-            init_device = "cpu"
-            assert (
-                world_size == 1
-            ), "Must create seed checkpoint using a single device, to disable sharding"
-            assert (
-                job_config.training_enable_ckpt
-            ), "Must enable checkpointing when creating a seed checkpoint"
-
-            model.to_empty(device=init_device)
-            if job_config.training_model_pretrained_weight_dir:
-                logger.info(f"Load pretrained weight from {job_config.training_model_pretrained_weight_dir}")
-                # TODO(xcsong): tie_word_emb=False? (this is required for pp)
-                with torch.no_grad():
-                    model = model.from_pretrained(job_config.training_model_pretrained_weight_dir,
-                                                  config=model_config)
-            else:
-                logger.info("Random initilize seed checkpoint.")
-                with torch.no_grad():
-                    model.post_init()
-                    self.train_spec.additional_post_init_fn(model, init_device)
-            folder = os.path.join(job_config.training_trace_dump_folder,
-                                  job_config.training_ckpt_folder,
-                                  "step-0")
-            os.makedirs(folder, exist_ok=True)
-            dcp.save({"model": model.state_dict()}, checkpoint_id=folder)
-            self.checkpointer = None
-            logger.info("Created seed checkpoint")
-            return
-        elif job_config.training_enable_cpu_offload:
+        if job_config.training_enable_cpu_offload:
             init_device = "cpu"
         else:
             init_device = device_type
@@ -330,7 +300,6 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
 
         # train loop
         # TODO(xcsong): support gradient accumalation steps?
-        # TODO(xcsong): audio_max_len?
         logger.info(
             "Trainer initialized. "
             f"Training starts at epoch {self.dataloader.get_epoch()} / {self.data_config.datalist_epoch}, "
@@ -654,8 +623,7 @@ if __name__ == "__main__":
 
     try:
         trainer = Trainer(tok_conf, data_conf, train_conf)
-        if not train_conf.training_create_seed_ckpt:
-            trainer.train()
+        trainer.train()
     finally:
         if trainer:
             trainer.close()

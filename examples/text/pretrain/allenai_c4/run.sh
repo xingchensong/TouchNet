@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # NOTE(xcsong): change xx_prefix and xx_version to ur setup
 cache_prefix=/bucket/output/jfs-hdfs/user/xingchen.song/share
 cuda_prefix=/bucket/output/jfs-hdfs/user/xingchen.song/tools/cuda
@@ -7,6 +9,12 @@ cudnn_version=9.5.1.17
 pretrained_weight_dir=""  # for fromscratch training
 # pretrained_weight_dir="/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct"  # for continue pretrain
 pretrained_tokenizer_dir="/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct"
+
+if [ "${pretrained_weight_dir}" != "" ]; then
+  exp_suffix="frompretrain"
+else
+  exp_suffix="fromscratch"
+fi
 
 # Automatically detect number of gpus
 if command -v nvidia-smi &> /dev/null; then
@@ -28,7 +36,6 @@ stop_stage=2
 # see https://pytorch.org/docs/stable/elastic/run.html
 HOST_NODE_ADDR="localhost:0"
 num_nodes=1
-
 job_id=2026
 
 hf_data_repo="allenai/c4"
@@ -39,21 +46,11 @@ dev_set=validation
 test_sets=  # c4 has no test set
 
 param_dtype="bfloat16"
-
 seed=2025
-model_config=config/Llama-3.2-1B.json
-exp_id="c4.en_1B_1x16384_fullac_cp4_tp1_dp2_pp1_flex_packloss_tieemb_fromscratch_linear2K1M_fixdev_head20"
-cp=$(echo $exp_id | grep -oP 'cp\d+' | grep -oP '\d+')
-tp=$(echo $exp_id | grep -oP 'tp\d+' | grep -oP '\d+')
-dp=$(echo $exp_id | grep -oP 'dp\d+' | grep -oP '\d+')
-pp=$(echo $exp_id | grep -oP 'pp\d+' | grep -oP '\d+')
-bs=$(echo $exp_id | grep -oP '\d+x\d+' | grep -oP '\d+' | head -n 1)
-max_seq_len=$(echo $exp_id | grep -oP '\d+x\d+' | grep -oP '\d+' | tail -n 1)
-echo "$0: ${exp_id}: cp=${cp}, tp=${tp}, dp=${dp}, pp=${pp}, bs=${bs}, max_seq_len=${max_seq_len}"
-
+model_config=Llama-3.2-1B.json
 tensorboard_dir=tensorboard
-num_workers=6
-prefetch=6
+num_workers=36
+prefetch=36
 
 . ./parse_options.sh || exit 1;
 . ./path.sh --cache_prefix ${cache_prefix} \
@@ -61,6 +58,15 @@ prefetch=6
             --cuda_version ${cuda_version} \
             --driver_version ${driver_version} \
             --cudnn_version ${cudnn_version} || exit 1
+
+exp_id="c4.en_1B_1x16384_fullac_cp4_tp1_dp2_pp1_flex_packloss_tieemb_linear2K1M_fixdev_head20_acc_${model_config}_${exp_suffix}"
+cp=$(echo $exp_id | grep -oP 'cp\d+' | grep -oP '\d+')
+tp=$(echo $exp_id | grep -oP 'tp\d+' | grep -oP '\d+')
+dp=$(echo $exp_id | grep -oP 'dp\d+' | grep -oP '\d+')
+pp=$(echo $exp_id | grep -oP 'pp\d+' | grep -oP '\d+')
+bs=$(echo $exp_id | grep -oP '\d+x\d+' | grep -oP '\d+' | head -n 1)
+max_seq_len=$(echo $exp_id | grep -oP '\d+x\d+' | grep -oP '\d+' | tail -n 1)
+echo "$0: ${exp_id}: cp=${cp}, tp=${tp}, dp=${dp}, pp=${pp}, bs=${bs}, max_seq_len=${max_seq_len}"
 
 if [ ${stage} -le -1 ] && [ ${stop_stage} -ge -1 ]; then
   echo "$0: stage -1: Data Download"
@@ -107,20 +113,9 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ] && [ "${pretrained_weight_dir}"
   echo "$0: Stage 1: create seed checkpoint for offline initialization"
   rm -rf "exp/${exp_id}"
   mkdir -p "exp/${exp_id}"
-  torchrun --nnodes=1 --nproc_per_node=1 \
-           --rdzv_id=$job_id --rdzv_backend="c10d" --rdzv_endpoint=$HOST_NODE_ADDR \
-    touchnet/bin/train.py \
-      --tokenizer_model "${pretrained_tokenizer_dir}" \
-      --tokenizer_type "HuggingFaceTokenizer" \
-      --datalist_path "data/${train_set}/data.list" \
-      --training_seed "${seed}" \
-      --training_model_name "llama" \
-      --training_model_config_path "${model_config}" \
-      --training_model_pretrained_weight_dir "${pretrained_weight_dir}" \
-      --training_print_args true \
-      --training_trace_dump_folder "exp/${exp_id}" \
-      --training_enable_ckpt true \
-      --training_create_seed_ckpt true
+  python touchnet/bin/convert_hf_to_dcp.py \
+    --ckpt_dir "exp/${exp_id}" \
+    --huggingface_model "${pretrained_weight_dir}"
 fi
 
 if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
@@ -150,7 +145,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --training_description "allenai c4.en" \
       --training_seed "${seed}" \
       --training_model_name "llama" \
-      --training_model_config_path "${model_config}" \
+      --training_model_config_path "config/${model_config}" \
       --training_print_args true \
       --training_trace_dump_folder "exp/${exp_id}" \
       --training_fsdp_reshard_after_forward "default" \
@@ -196,7 +191,7 @@ if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then
   echo "$0: Stage 3: convert dcp to huggingface-format"
   python touchnet/bin/convert_dcp_to_hf.py \
     --ckpt_dir "exp/${exp_id}" \
-    --step 260000 \
-    --config "${model_config}" \
+    --step 1000000 \
+    --config "config/${model_config}" \
     --tokenizer_model "${pretrained_tokenizer_dir}"
 fi
