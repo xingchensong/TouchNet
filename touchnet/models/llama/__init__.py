@@ -1,6 +1,7 @@
 from typing import Tuple
 
 import torch
+from transformers import AutoConfig, AutoModelForCausalLM
 from transformers.models.llama import LlamaConfig, LlamaForCausalLM
 from transformers.models.llama.modeling_llama import LlamaRMSNorm
 
@@ -94,3 +95,6 @@ register_train_spec(
         get_num_flop_per_token_fn=get_num_flop_per_token,
     )
 )
+
+AutoConfig.register(LlamaForASRConfig.model_type, LlamaForASRConfig, True)
+AutoModelForCausalLM.register(LlamaForASRConfig, LlamaForASR, True)

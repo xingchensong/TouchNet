@@ -14,6 +14,7 @@ from touchnet.models.llama.configuration_llama import LlamaForASRConfig
 
 
 class LlamaForASR(LlamaForCausalLM):
+    config_class = LlamaForASRConfig
 
     def __init__(self, config: LlamaForASRConfig):
         super().__init__(config)
