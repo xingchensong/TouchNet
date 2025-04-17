@@ -25,8 +25,8 @@ def save_pretrained(args: CkptConverterConfig):
     ckpt_hf_dir = os.path.join(args.ckpt_dir, "checkpoint_hf", f"step-{args.step}")
     logger.info(f"Saving the config to {ckpt_hf_dir}")
     config.save_pretrained(ckpt_hf_dir)
-    logger.info(f"Loading the tokenizer from {args.tokenizer}")
-    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer, trust_remote_code=True)
+    logger.info(f"Loading the tokenizer from {args.tokenizer_model}")
+    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_model, trust_remote_code=True)
     logger.info(f"Saving the tokenizer to {ckpt_hf_dir}")
     tokenizer.save_pretrained(ckpt_hf_dir)
 
