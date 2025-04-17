@@ -4,9 +4,9 @@ cuda_prefix=/bucket/output/jfs-hdfs/user/xingchen.song/tools/cuda
 cuda_version=12.6.3
 driver_version=560.35.05
 cudnn_version=9.5.1.17
-pretrained_weight_dir="/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct"
+pretrained_weight_dir=""  # for fromscratch training
+# pretrained_weight_dir="/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct"  # for continue pretrain
 pretrained_tokenizer_dir="/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct"
-# pretrained_tokenizer_dir="/bucket/output/jfs-hdfs/user/mengtao.xing-halo/workspace/cosyvoice_git/pretrained_models/CosyVoice2-0.5B/CosyVoice-BlankEN"
 
 
 # Automatically detect number of gpus
@@ -85,26 +85,9 @@ if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
           --datatypes "audio+metainfo"
     fi
   done
-  exit
 fi
 
-if [[ $exp_id == *"fromseed"* ]] && [ ${stop_stage} -ge 2 ]; then
-  pretrained_weight_dir=""
-  stage=1
-  stop_stage=2
-fi
-
-if [[ $exp_id == *"fromscratch"* ]] && [ ${stop_stage} -ge 2 ]; then
-  stage=2
-  stop_stage=2
-fi
-
-if [[ $exp_id == *"frompretrain"* ]] && [ ${stop_stage} -ge 2 ]; then
-  stage=1
-  stop_stage=2
-fi
-
-if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
+if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ] && [ "${pretrained_weight_dir}" != "" ]; then
   echo "$0: Stage 1: create seed checkpoint for offline initialization"
   rm -rf "exp/${exp_id}"
   mkdir -p "exp/${exp_id}"
@@ -217,4 +200,13 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --lr_scheduler_warmup_steps 12000 \
       --lr_scheduler_decay_type "linear" \
       --lr_scheduler_lr_min 0.0
+fi
+
+if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then
+  echo "$0: Stage 3: convert dcp to huggingface-format"
+  python touchnet/bin/convert_dcp_to_hf.py \
+    --ckpt_dir "exp/${exp_id}" \
+    --step 260000 \
+    --config "${model_config}" \
+    --tokenizer_model "${pretrained_tokenizer_dir}"
 fi

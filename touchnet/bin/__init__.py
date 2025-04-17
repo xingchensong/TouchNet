@@ -641,3 +641,34 @@ class TrainConfig:
             ),
         },
     )
+
+@dataclass
+class CkptConverterConfig:
+    """Configuration object for checkpoint conversion."""
+
+    _argument_group_name = "ckpt_converter"
+
+    ckpt_dir: str = field(
+        default=None,
+        metadata={
+            "help": ("pretrained checkpoint path, `exp/*`."),
+        },
+    )
+    config: str = field(
+        default=None,
+        metadata={
+            "help": ("model config, `config/*.json`."),
+        },
+    )
+    step: int = field(
+        default=None,
+        metadata={
+            "help": ("checkpoint step."),
+        },
+    )
+    tokenizer_model: str = field(
+        default=None,
+        metadata={
+            "help": ("tokenizer path."),
+        },
+    )

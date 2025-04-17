@@ -16,6 +16,8 @@ class LlamaForASRConfig(LlamaConfig):
             Dimension of the input representations (mel or fbank).
     """
 
+    model_type = "llama4asr"
+
     def __init__(
         self,
         input_size: int = 4096,
