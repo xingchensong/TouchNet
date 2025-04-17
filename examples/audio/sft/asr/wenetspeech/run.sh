@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # NOTE(xcsong): change xx_prefix and xx_version to ur setup
 cache_prefix=/bucket/output/jfs-hdfs/user/xingchen.song/share
 cuda_prefix=/bucket/output/jfs-hdfs/user/xingchen.song/tools/cuda
@@ -8,6 +10,11 @@ pretrained_weight_dir=""  # for fromscratch training
 # pretrained_weight_dir="/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct"  # for continue pretrain
 pretrained_tokenizer_dir="/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct"
 
+if [ "${pretrained_weight_dir}" != "" ]; then
+  exp_suffix="frompretrain"
+else
+  exp_suffix="fromscratch"
+fi
 
 # Automatically detect number of gpus
 if command -v nvidia-smi &> /dev/null; then
@@ -29,7 +36,6 @@ stop_stage=2
 # see https://pytorch.org/docs/stable/elastic/run.html
 HOST_NODE_ADDR="localhost:0"
 num_nodes=1
-
 job_id=2026
 
 hf_data_repo="wenet-e2e/wenetspeech"
@@ -40,11 +46,21 @@ dev_set=dev
 test_sets="test_net test_meeting"
 
 param_dtype="bfloat16"
-
 seed=2025
-model_config=config/Llama-3.2.json
-exp_id="wenetspeech_1x8192_fullac_cp1_tp1_dp8_pp1_stack7_stride6_flex_packloss_fromscratch_mid_ar_std0.02_acc_normpreproc_wp12k_addpad"
-# exp_id="wenetspeech_1x16384_fullac_cp2_tp2_dp2_pp1_stack7_stride6_flex_packloss_fromscratch_mid_ar_std0.02_acc_normpreproc_wp12k_addpad"
+model_config=Llama-3.2.json
+tensorboard_dir=tensorboard
+num_workers=12
+prefetch=12
+
+. ./parse_options.sh || exit 1;
+. ./path.sh --cache_prefix ${cache_prefix} \
+            --cuda_prefix ${cuda_prefix} \
+            --cuda_version ${cuda_version} \
+            --driver_version ${driver_version} \
+            --cudnn_version ${cudnn_version} || exit 1
+
+exp_id="wenetspeech_1x8192_fullac_cp1_tp1_dp8_pp1_stack7_stride6_flex_packloss_mid_ar_std0.02_acc_normpreproc_wp12k_addpad_${model_config}_${exp_suffix}"
+# exp_id="wenetspeech_1x16384_fullac_cp2_tp2_dp2_pp1_stack7_stride6_flex_packloss_mid_ar_std0.02_acc_normpreproc_wp12k_addpad_${model_config}_${exp_suffix}"
 cp=$(echo $exp_id | grep -oP 'cp\d+' | grep -oP '\d+')
 tp=$(echo $exp_id | grep -oP 'tp\d+' | grep -oP '\d+')
 dp=$(echo $exp_id | grep -oP 'dp\d+' | grep -oP '\d+')
@@ -55,23 +71,11 @@ bs=$(echo $exp_id | grep -oP '\d+x\d+' | grep -oP '\d+' | head -n 1)
 max_seq_len=$(echo $exp_id | grep -oP '\d+x\d+' | grep -oP '\d+' | tail -n 1)
 echo "$0: ${exp_id}: cp=${cp}, tp=${tp}, dp=${dp}, pp=${pp}, stack=${stack}, stride=${stride}, bs=${bs}, max_seq_len=${max_seq_len}"
 
-tensorboard_dir=tensorboard
-num_workers=6
-prefetch=6
-
-. ./parse_options.sh || exit 1;
-. ./path.sh --cache_prefix ${cache_prefix} \
-            --cuda_prefix ${cuda_prefix} \
-            --cuda_version ${cuda_version} \
-            --driver_version ${driver_version} \
-            --cudnn_version ${cudnn_version} || exit 1
-
 if [ ${stage} -le -1 ] && [ ${stop_stage} -ge -1 ]; then
   echo "$0: stage -1: Data Download"
   python download_wenetspeech.py
 fi
 
-# TODO(xcsong): character based chinese tokenizer? like CosyVoice2.
 if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
   for x in ${train_set} ${dev_set} ${test_sets}; do
     if [ ! -f "data/${x}/data.list" ]; then
@@ -91,20 +95,9 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ] && [ "${pretrained_weight_dir}"
   echo "$0: Stage 1: create seed checkpoint for offline initialization"
   rm -rf "exp/${exp_id}"
   mkdir -p "exp/${exp_id}"
-  torchrun --nnodes=1 --nproc_per_node=1 \
-           --rdzv_id=$job_id --rdzv_backend="c10d" --rdzv_endpoint=$HOST_NODE_ADDR \
-    touchnet/bin/train.py \
-      --tokenizer_model "${pretrained_tokenizer_dir}" \
-      --tokenizer_type "HuggingFaceTokenizer" \
-      --datalist_path "data/${train_set}/data.list" \
-      --training_seed "${seed}" \
-      --training_model_name "llama.asr" \
-      --training_model_config_path "${model_config}" \
-      --training_model_pretrained_weight_dir "${pretrained_weight_dir}" \
-      --training_print_args true \
-      --training_trace_dump_folder "exp/${exp_id}" \
-      --training_enable_ckpt true \
-      --training_create_seed_ckpt true
+  python touchnet/bin/convert_hf_to_dcp.py \
+    --ckpt_dir "exp/${exp_id}" \
+    --huggingface_model "${pretrained_weight_dir}"
 fi
 
 if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
@@ -160,7 +153,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --training_description "wenetspeech asr" \
       --training_seed "${seed}" \
       --training_model_name "llama.asr" \
-      --training_model_config_path "${model_config}" \
+      --training_model_config_path "config/${model_config}" \
       --training_print_args true \
       --training_trace_dump_folder "exp/${exp_id}" \
       --training_fsdp_reshard_after_forward "default" \
@@ -207,6 +200,6 @@ if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then
   python touchnet/bin/convert_dcp_to_hf.py \
     --ckpt_dir "exp/${exp_id}" \
     --step 260000 \
-    --config "${model_config}" \
+    --config "config/${model_config}" \
     --tokenizer_model "${pretrained_tokenizer_dir}"
 fi

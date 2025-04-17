@@ -10,6 +10,7 @@ cudnn_version=9.5.1.17
 
 export CUDA_HOME=${cuda_prefix}/cuda-${cuda_version}_cudnn-${cudnn_version}
 export PATH=$CUDA_HOME/bin:$PATH
+export LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-""}
 export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$CUDA_HOME/lib64/stubs:/usr/lib:/usr/lib64:$LD_LIBRARY_PATH
 export LD_LIBRARY_PATH=$CUDA_HOME/extras/CUPTI/lib64:$LD_LIBRARY_PATH
 export CUDAToolkit_ROOT_DIR=$CUDA_HOME

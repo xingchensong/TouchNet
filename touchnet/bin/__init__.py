@@ -82,14 +82,6 @@ class TrainConfig:
             ),
         },
     )
-    training_model_pretrained_weight_dir: str = field(
-        default=None,
-        metadata={
-            "help": (
-                "dir to model weight files (huggingface style *.bin or *.safetensors)."
-            ),
-        },
-    )
     # metrics/logging configs
     training_description: str = field(
         default="default job",
@@ -555,16 +547,6 @@ class TrainConfig:
             ),
         },
     )
-    training_create_seed_ckpt: bool = field(
-        default=False,
-        metadata={
-            "help": (
-                "Initializes the full model without applying parallelisms, and then saves it as a seed checkpoint. "
-                "Note: requires user to call train.py without specifying any parallelisms, e.g. NGPU=1. "
-                "Could be implemented as a separate script, but this way shares more code."
-            ),
-        },
-    )
     # optimizer & lr configs
     optimizer_name: str = field(
         default="AdamW",
@@ -651,24 +633,34 @@ class CkptConverterConfig:
     ckpt_dir: str = field(
         default=None,
         metadata={
-            "help": ("pretrained checkpoint path, `exp/*`."),
+            "help": (
+                "In dcp2hf, it means pretrained checkpoint path. ",
+                "In hf2dcp, it means path to save seed checkpoint. ",
+                "e.g., `exp/*`."
+            ),
         },
     )
     config: str = field(
         default=None,
         metadata={
-            "help": ("model config, `config/*.json`."),
+            "help": ("model config, `config/*.json`. only used in dcp2hf."),
         },
     )
     step: int = field(
         default=None,
         metadata={
-            "help": ("checkpoint step."),
+            "help": ("checkpoint step. only used in dcp2hf."),
         },
     )
     tokenizer_model: str = field(
         default=None,
         metadata={
-            "help": ("tokenizer path."),
+            "help": ("tokenizer path. only used in dcp2hf."),
+        },
+    )
+    huggingface_model: str = field(
+        default=None,
+        metadata={
+            "help": ("pretrained model path. only used in hf2dcp."),
         },
     )
