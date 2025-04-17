@@ -49,8 +49,8 @@ param_dtype="bfloat16"
 seed=2025
 model_config=Llama-3.2-1B.json
 tensorboard_dir=tensorboard
-num_workers=36
-prefetch=36
+num_workers=12
+prefetch=12
 
 . ./parse_options.sh || exit 1;
 . ./path.sh --cache_prefix ${cache_prefix} \
@@ -59,7 +59,7 @@ prefetch=36
             --driver_version ${driver_version} \
             --cudnn_version ${cudnn_version} || exit 1
 
-exp_id="c4.en_1B_1x16384_fullac_cp4_tp1_dp2_pp1_flex_packloss_tieemb_linear2K1M_fixdev_head20_acc_${model_config}_${exp_suffix}"
+exp_id="c4.en_1B_1x16384_fullac_cp1_tp1_dp8_pp1_flex_packloss_tieemb_linear2K1M_${model_config}_${exp_suffix}"
 cp=$(echo $exp_id | grep -oP 'cp\d+' | grep -oP '\d+')
 tp=$(echo $exp_id | grep -oP 'tp\d+' | grep -oP '\d+')
 dp=$(echo $exp_id | grep -oP 'dp\d+' | grep -oP '\d+')

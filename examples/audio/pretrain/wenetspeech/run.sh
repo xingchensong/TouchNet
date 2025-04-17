@@ -49,8 +49,8 @@ param_dtype="bfloat16"
 seed=2026
 model_config=Llama-3.2-1B.json
 tensorboard_dir=tensorboard
-num_workers=36
-prefetch=36
+num_workers=12
+prefetch=12
 num_mel_bins=80
 
 . ./parse_options.sh || exit 1;
