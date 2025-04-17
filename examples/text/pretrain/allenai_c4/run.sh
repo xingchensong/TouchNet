@@ -59,7 +59,7 @@ prefetch=12
             --driver_version ${driver_version} \
             --cudnn_version ${cudnn_version} || exit 1
 
-exp_id="c4.en_1B_1x16384_fullac_cp1_tp1_dp8_pp1_flex_packloss_tieemb_linear2K1M_${model_config}_${exp_suffix}"
+exp_id="c4.en_1x16384_fullac_cp1_tp1_dp8_pp1_flex_packloss_tieemb_linear2K1M_${model_config}_${exp_suffix}"
 cp=$(echo $exp_id | grep -oP 'cp\d+' | grep -oP '\d+')
 tp=$(echo $exp_id | grep -oP 'tp\d+' | grep -oP '\d+')
 dp=$(echo $exp_id | grep -oP 'dp\d+' | grep -oP '\d+')
@@ -157,9 +157,9 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --training_pipeline_parallel_schedule "1F1B" \
       --training_enable_ckpt true \
       --training_ckpt_load_step -1 \
-      --training_ckpt_interval 500 \
+      --training_ckpt_interval 2000 \
       --training_ckpt_keep_latest_k 2 \
-      --training_log_freq 1 \
+      --training_log_freq 100 \
       --training_enable_tensorboard true \
       --training_save_tb_folder "tensorboard" \
       --training_tb_rank_0_only true \
@@ -167,7 +167,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --training_mixed_precision_reduce "float32" \
       --training_compile true \
       --training_enable_compiled_autograd false \
-      --training_gc_freq 500 \
+      --training_gc_freq 1000 \
       --training_deterministic false \
       --training_max_norm 1.0 \
       --training_activation_checkpoint_mode "full" \
