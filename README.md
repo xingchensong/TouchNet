@@ -80,6 +80,6 @@ pip install .
 ## Acknowledge
 
 1. This repo is highly motivated by [torchtitan](https://github.com/pytorch/torchtitan) and we borrowed a lot of code from it.
-2. This repo also benefits from [Megatron-LM](https://github.com/NVIDIA/Megatron-LM), [WeNet](https://github.com/wenet-e2e/wenet).
+2. This repo also benefits from [Megatron-LM](https://github.com/NVIDIA/Megatron-LM), [WeNet](https://github.com/wenet-e2e/wenet), [flame](https://github.com/fla-org/flame).
 
 Thanks for their wonderful works.
