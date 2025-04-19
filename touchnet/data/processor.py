@@ -1,5 +1,6 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) 2021 Mobvoi Inc. (authors: Binbin Zhang)
-#               2025 WeNet Community. Xingchen Song(sxc19@tsinghua.org.cn)
+#               2025, Xingchen Song(sxc19@tsinghua.org.cn)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.

@@ -1,5 +1,6 @@
-# Copyright (c) 2023, NVIDIA CORPORATION (Megatron-LM teams). All rights reserved.
-#               2025, WeNet Community. Xingchen Song(sxc19@tsinghua.org.cn)
+# -*- coding: utf-8 -*-
+# Copyright (c) 2023, NVIDIA CORPORATION (Megatron-LM teams).
+#               2025, Xingchen Song(sxc19@tsinghua.org.cn)
 
 """Touch tokenizers."""
 
