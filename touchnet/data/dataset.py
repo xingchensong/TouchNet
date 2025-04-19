@@ -1,6 +1,7 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) Facebook, Inc. and its affiliates.
 #               Megatron-LM team.
-#               2025 WeNet Community. Xingchen Song(sxc19@tsinghua.org.cn)
+#               2025, Xingchen Song(sxc19@tsinghua.org.cn)
 
 import os
 import struct

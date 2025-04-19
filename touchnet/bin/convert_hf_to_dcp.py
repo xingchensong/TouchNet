@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) 2023-2025, Songlin Yang, Yu Zhang
+#               2025, Xingchen Song(sxc19@tsinghua.org.cn)
 
 import os
 from pathlib import Path
