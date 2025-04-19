@@ -2,7 +2,7 @@
 
 # 👆 TouchNet [WIP]
 
-#### A PyTorch native 4-D parallel library for large-scale multimodal LLM (text/audio) training
+#### A PyTorch native N-D parallel library for large-scale multimodal LLM (text/audio) training
 
 [![integration tests](https://github.com/xingchensong/TouchNet/actions/workflows/unit_test_cpu.yaml/badge.svg?branch=main)](https://github.com/xingchensong/TouchNet/actions/workflows/unit_test_cpu.yaml?query=branch%3Amain)
 [![docs](https://img.shields.io/badge/docs-latest-blue.svg)](docs/)
@@ -25,7 +25,7 @@ Our guiding principles when building `👆 touchnet` are:
 3. 🛠️ Built-in profilers (CPU/GPU/memory) with flight recorder diagnostics.
     - [[Nsys-like Profiler]](https://github.com/pytorch/kineto/blob/main/tb_plugin/README.md) to get optimization recommendations
     - [[Memory Monitor]](https://pytorch.org/blog/understanding-gpu-memory-1/) to debug OOM errors and improve memory usage
-4. 🎯 4-D parallelism enabled through **PyTorch native API** and minimal lines of model code changes.
+4. 🎯 N-D parallelism enabled through **PyTorch native API** and minimal lines of model code changes.
     - [[FSDP2]](https://pytorch.org/docs/stable/distributed.fsdp.fully_shard.html), [why FSDP1 -> FSDP2?](https://github.com/pytorch/torchtitan/blob/main/docs/fsdp.md)
     - [[Tensor Parallel]](https://pytorch.org/docs/stable/distributed.tensor.parallel.html), [[Context Parallel]](https://discuss.pytorch.org/t/distributed-w-torchtitan-breaking-barriers-training-long-context-llms-with-1m-sequence-length-in-pytorch-using-context-parallel/215082), [[Pipeline Parallel]](https://discuss.pytorch.org/t/distributed-w-torchtitan-training-with-zero-bubble-pipeline-parallelism/214420) (PP WIP🚧), [[Distributed Checkpoint]](https://pytorch.org/docs/stable/distributed.checkpoint.html)
 5. ✨ Intuitive API design for rapid adoption & customization in minutes.
@@ -51,6 +51,13 @@ Memory profiling identifies GPU memory allocation patterns to guide tuning strat
 
 </div>
 
+## TODO
+
+- [ ] support audio/sft/tts
+- [ ] support MoE
+- [ ] support vision/pretrain vision/sft
+- [ ] support text/sft
+
 ## Installation
 
 ```sh
@@ -70,7 +77,7 @@ pip install .
 
 ```txt
 @misc{touchnet,
-  title={TouchNet: A PyTorch native 4-D parallel library for large-scale multimodal LLM (text/audio) training},
+  title={TouchNet: A PyTorch native N-D parallel library for large-scale multimodal LLM (text/audio) training},
   author={Xingchen Song},
   year={2025},
   url={https://github.com/xingchensong/TouchNet},
