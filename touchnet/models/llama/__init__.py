@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) 2025, Xingchen Song(sxc19@tsinghua.org.cn)
 
-from typing import Tuple
-
 import torch
-from transformers import AutoConfig, AutoModelForCausalLM
+from transformers import AutoConfig, AutoModelForCausalLM, PretrainedConfig
 from transformers.models.llama import LlamaConfig, LlamaForCausalLM
 from transformers.models.llama.modeling_llama import LlamaRMSNorm
 
@@ -20,18 +18,20 @@ from touchnet.utils.optimizer import build_lr_schedulers, build_optimizers
 from touchnet.utils.train_spec import TrainSpec, register_train_spec
 
 
-def post_init(model: LlamaForCausalLM, init_device: torch.device):
+def post_init(model: AutoModelForCausalLM, init_device: torch.device):
     """Post-initialization function for LlamaForCausalLM and LlamaForASR."""
 
+    base_model_prefix = getattr(model, "base_model_prefix", "model")
+    submodel = getattr(model, f"{base_model_prefix}")
     # NOTE(xcsong): Init rope and norm.weight
-    inv_freq, attention_scaling = model.model.rotary_emb.rope_init_fn(
-        model.model.rotary_emb.config, device=init_device)
-    model.model.rotary_emb.inv_freq = inv_freq
-    model.model.rotary_emb.attention_scaling = attention_scaling
-    model.model.rotary_emb.original_inv_freq = inv_freq
-    assert isinstance(model.model.norm, LlamaRMSNorm)
-    torch.nn.init.ones_(model.model.norm.weight)
-    for layer in model.model.layers:
+    inv_freq, attention_scaling = submodel.rotary_emb.rope_init_fn(
+        submodel.rotary_emb.config, device=init_device)
+    submodel.rotary_emb.inv_freq = inv_freq
+    submodel.rotary_emb.attention_scaling = attention_scaling
+    submodel.rotary_emb.original_inv_freq = inv_freq
+    assert isinstance(submodel.norm, LlamaRMSNorm)
+    torch.nn.init.ones_(submodel.norm.weight)
+    for layer in submodel.layers:
         assert isinstance(layer.input_layernorm, LlamaRMSNorm)
         assert isinstance(layer.post_attention_layernorm, LlamaRMSNorm)
         torch.nn.init.ones_(layer.input_layernorm.weight)
@@ -43,7 +43,7 @@ def post_init(model: LlamaForCausalLM, init_device: torch.device):
             raise ValueError(f"NaN/inf in model parameters `{name}`.")
 
 
-def get_num_flop_per_token(num_params: int, model_config: LlamaConfig, seq_len: int) -> int:
+def get_num_flop_per_token(num_params: int, model_config: PretrainedConfig, seq_len: int) -> int:
     l, h, q, t = (
         model_config.num_hidden_layers,
         model_config.num_attention_heads,
