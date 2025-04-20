@@ -16,8 +16,6 @@ dependencies = [
     "tokenizers>=0.21.1",
 
     # Torch
-    "torch>=2.6.0",
-    "torchaudio>=2.6.0",
     "torchdata>=0.11.0",
     "torch-tb-profiler>=0.4.3",
 

@@ -37,6 +37,7 @@ jobs:
         run: |
           set -eux
           sudo apt update && sudo apt install -y ffmpeg  libsox-dev libsndfile1
+          pip install --pre torch torchaudio --index-url https://download.pytorch.org/whl/nightly/cu126 --force-reinstall
           pip install ".[dev]"
       - name: Run Pytest
         run: |
