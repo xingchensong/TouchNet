@@ -53,6 +53,18 @@ Memory profiling identifies GPU memory allocation patterns to guide tuning strat
 
 </div>
 
+## Dive into the code
+
+Here is an end-to-end workflow for a traning job in `👆 TouchNet`:
+
+1. `stage-1`: Download dataset. We use `load_dataset` API in `HuggingFace.datasets` to download specific data.
+2. `stage-2`: Convert dataset format to `TouchDataset`. see [[touchnet/bin/make_data.py]](./touchnet/bin/make_data.py)
+3. `stage-3`: (optional) Convert hf-format ckpt to torch distributed ckpt. see [[touchnet/bin/convert_hf_to_dcp.py]](./touchnet/bin/convert_hf_to_dcp.py)
+4. `stage-4`: Start training, either from scratch or from pretrained ckpt that has been converted in stage-3. see [[touchnet/bin/train.py]](./touchnet/bin/train.py)
+5. `stage-5`: Convert torch distributed ckpt to hf-format, enjoy HuggingFace ecosystem for inference and deployment. see [[touchnet/bin/convert_dcp_to_hf.py]](./touchnet/bin/convert_dcp_to_hf.py)
+
+For a more concrete example running those stages one by one, see [[examples/audio/sft/asr/aishell/run.sh]](./examples/audio/sft/asr/aishell/run.sh)
+
 ## TODO
 
 - [ ] support audio/sft/tts
