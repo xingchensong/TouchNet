@@ -4,13 +4,13 @@
 from typing import List, Optional, Tuple, Union
 
 import torch
-from transformers.generation import GenerationMixin
 from transformers.cache_utils import Cache
+from transformers.generation import GenerationMixin
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.models.llama.modeling_llama import (LLAMA_INPUTS_DOCSTRING,
                                                       KwargsForCausalLM,
-                                                      LlamaPreTrainedModel,
-                                                      LlamaForCausalLM)
+                                                      LlamaForCausalLM,
+                                                      LlamaPreTrainedModel)
 from transformers.processing_utils import Unpack
 from transformers.utils import (add_start_docstrings_to_model_forward,
                                 replace_return_docstrings)

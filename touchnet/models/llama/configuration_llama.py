@@ -2,6 +2,7 @@
 # Copyright (c) 2025, Xingchen Song(sxc19@tsinghua.org.cn)
 
 from typing import Optional
+
 from transformers.configuration_utils import PretrainedConfig
 from transformers.models.llama.configuration_llama import LlamaConfig
 
