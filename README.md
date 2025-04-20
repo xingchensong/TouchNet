@@ -1,6 +1,6 @@
 <div align="center">
 
-![TouchNet](./assets/Touchnet_16_9.jpg)
+<img src="./assets/Touchnet_16_9.jpg" width="50%" alt="TouchNet">
 
 # 👆 TouchNet [WIP]
 
