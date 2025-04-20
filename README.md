@@ -1,5 +1,7 @@
 <div align="center">
 
+![TouchNet](./assets/Touchnet_16_9.jpg)
+
 # 👆 TouchNet [WIP]
 
 #### A PyTorch native N-D parallel library for large-scale multimodal LLM (text/audio) training
