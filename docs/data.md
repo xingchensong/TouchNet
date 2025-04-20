@@ -22,11 +22,18 @@ three clips segmented from the same source will be treated as individual data an
 ## **2. What do we need when scaling (multimodal) data?**
 
 1. **Random Access**:
-   - Random data retrieval for fast dataloader resumption (e.g., when your training breaks down and you want to restore from that exact point) and global data shuffling without additional [[ShuffleBuffer]](https://huggingface.co/docs/datasets/v3.5.0/en/stream#shuffle).
+   - Random data retrieval for fast dataloader resumption (e.g., when your training breaks down and you want to restore from that exact point, see figure below) and global data shuffling without additional [[ShuffleBuffer]](https://huggingface.co/docs/datasets/v3.5.0/en/stream#shuffle).
 2. **Decoupled RawData-MetaData**:
    - Enable annotation updates (e.g., improved ASR transcripts or new event tags) without loading entire audio/video.
 3. **On-the-fly Segmentation**:
    - Instead of segmenting audio/video offline and saving them independently, we do on-the-fly slicing (according to timestamp annotations) on raw audio/video to avoid redundancy.
+
+<div align="center">
+
+![timewaste](../assets/timewaste.png)
+Screenshot from Meta's OPT Logs. When training their [OPT](https://ai.meta.com/blog/democratizing-access-to-large-scale-language-models-with-opt-175b/) models, Meta [reported](https://github.com/facebookresearch/metaseq/blob/main/projects/OPT/chronicles/OPT175B_Logbook.pdf) wasting thousands of GPU-hours replaying their data loading after crashes in order to resume training where they left off.
+
+</div>
 
 ---
 
