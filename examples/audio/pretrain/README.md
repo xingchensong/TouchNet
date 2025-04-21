@@ -9,7 +9,7 @@ We use a training-free audio tokenizer called `BEST-RQ`, which uses a randomly i
 
 Comparison between [BEST-RQ](https://arxiv.org/pdf/2202.01855), [NEST-RQ](https://arxiv.org/abs/2409.08680) and our proposed `👆 TouchNet` solution.
 
-<div align="center">
+</div>
 
 Regarding the optimization of the training process, we have made three improvements on the basis of `BEST-RQ`:
 
