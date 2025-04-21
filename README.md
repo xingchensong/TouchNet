@@ -32,7 +32,7 @@ Our guiding principles when building `👆 touchnet` are:
     - [[Tensor Parallel]](https://pytorch.org/docs/stable/distributed.tensor.parallel.html), [[Context Parallel]](https://discuss.pytorch.org/t/distributed-w-torchtitan-breaking-barriers-training-long-context-llms-with-1m-sequence-length-in-pytorch-using-context-parallel/215082), [[Pipeline Parallel]](https://discuss.pytorch.org/t/distributed-w-torchtitan-training-with-zero-bubble-pipeline-parallelism/214420) (PP WIP🚧), [[Distributed Checkpoint]](https://pytorch.org/docs/stable/distributed.checkpoint.html)
 5. ✨ Intuitive API design for rapid adoption & customization in minutes.
     - Supported tasks: [[text/pretrain]](https://github.com/xingchensong/TouchNet/tree/main/examples/text/pretrain), [[audio/pretrain]](https://github.com/xingchensong/TouchNet/tree/main/examples/audio/pretrain), [[audio/sft/asr]](https://github.com/xingchensong/TouchNet/tree/main/examples/audio/sft/asr), more tasks coming soon
-    - Supported models: [[Llama]](https://github.com/xingchensong/TouchNet/tree/main/touchnet/models/llama), more models coming soon
+    - Supported models: [[Llama]](https://github.com/xingchensong/TouchNet/tree/main/touchnet/models/llama), [[LlamaForASR]](./docs/LlamaForASR.md) more models coming soon
 
 
 ## Quick Glance at 👆 TouchNet
