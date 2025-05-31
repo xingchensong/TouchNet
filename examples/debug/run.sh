@@ -1,10 +1,7 @@
 # NOTE(xcsong): change xx_prefix and xx_version to ur setup
-cache_prefix=/bucket/output/jfs-hdfs/user/xingchen.song/share
-cuda_prefix=/bucket/output/jfs-hdfs/user/xingchen.song/tools/cuda
-cuda_version=12.6.3
-driver_version=560.35.05
-cudnn_version=9.5.1.17
-pretrained_weight_dir="/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct"
+cache_prefix=/mnt/user-ssd/songxingchen/share
+cuda_prefix=/usr/local
+pretrained_weight_dir="/mnt/user-ssd/songxingchen/share/modelscope/Llama-3.2-1B-Instruct"
 
 # Automatically detect number of gpus
 if command -v nvidia-smi &> /dev/null; then
@@ -55,10 +52,7 @@ prefetch=6
 
 . ./parse_options.sh || exit 1;
 . ./path.sh --cache_prefix ${cache_prefix} \
-            --cuda_prefix ${cuda_prefix} \
-            --cuda_version ${cuda_version} \
-            --driver_version ${driver_version} \
-            --cudnn_version ${cudnn_version} || exit 1
+            --cuda_prefix ${cuda_prefix} || exit 1
 
 if [ ${stage} -le -1 ] && [ ${stop_stage} -ge -1 ]; then
   echo "$0: stage -1: Data Download"

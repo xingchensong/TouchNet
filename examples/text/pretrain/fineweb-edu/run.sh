@@ -1,11 +1,8 @@
 #!/bin/bash
 
 # NOTE(xcsong): change xx_prefix and xx_version to ur setup
-cache_prefix=/bucket/output/jfs-hdfs/user/xingchen.song/share
-cuda_prefix=/bucket/output/jfs-hdfs/user/xingchen.song/tools/cuda
-cuda_version=12.6.3
-driver_version=560.35.05
-cudnn_version=9.5.1.17
+cache_prefix=/mnt/user-ssd/songxingchen/share
+cuda_prefix=/usr/local
 pretrained_weight_dir=""  # for fromscratch training
 # pretrained_weight_dir="/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct"  # for continue pretrain
 pretrained_tokenizer_dir="/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct"
@@ -47,17 +44,14 @@ test_sets=  # fineweb-edu has no test set
 
 param_dtype="bfloat16"
 seed=2025
-model_config=Llama-3.2-1B.json
+model_config=Llama-3_2-1B
 tensorboard_dir=tensorboard
 num_workers=12
 prefetch=12
 
 . ./parse_options.sh || exit 1;
 . ./path.sh --cache_prefix ${cache_prefix} \
-            --cuda_prefix ${cuda_prefix} \
-            --cuda_version ${cuda_version} \
-            --driver_version ${driver_version} \
-            --cudnn_version ${cudnn_version} || exit 1
+            --cuda_prefix ${cuda_prefix} || exit 1
 
 exp_id="fineweb-edu_1B_1x8192_fullac_cp1_tp1_dp8_pp1_flex_packloss_tieemb_linear2K1M_fixdev_head20_acc_${model_config}_${exp_suffix}"
 cp=$(echo $exp_id | grep -oP 'cp\d+' | grep -oP '\d+')
@@ -136,7 +130,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --training_description "fineweb-edu" \
       --training_seed "${seed}" \
       --training_model_name "llama" \
-      --training_model_config_path "config/${model_config}" \
+      --training_model_config_path "config/${model_config}.json" \
       --training_print_args true \
       --training_trace_dump_folder "exp/${exp_id}" \
       --training_fsdp_reshard_after_forward "default" \
@@ -183,6 +177,6 @@ if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then
   python touchnet/bin/convert_dcp_to_hf.py \
     --ckpt_dir "exp/${exp_id}" \
     --step 1000000 \
-    --config "config/${model_config}" \
+    --config "config/${model_config}.json" \
     --tokenizer_model "${pretrained_tokenizer_dir}"
 fi
