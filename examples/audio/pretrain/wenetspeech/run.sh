@@ -1,14 +1,11 @@
 #!/bin/bash
 
 # NOTE(xcsong): change xx_prefix and xx_version to ur setup
-cache_prefix=/bucket/output/jfs-hdfs/user/xingchen.song/share
-cuda_prefix=/bucket/output/jfs-hdfs/user/xingchen.song/tools/cuda
-cuda_version=12.6.3
-driver_version=560.35.05
-cudnn_version=9.5.1.17
+cache_prefix=/mnt/user-ssd/songxingchen/share
+cuda_prefix=/usr/local
 pretrained_weight_dir=""  # for fromscratch training
-# pretrained_weight_dir="/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct"  # for continue pretrain
-pretrained_tokenizer_dir="/bucket/output/jfs-hdfs/user/xingchen.song/share/modelscope/Llama-3.2-1B-Instruct"
+# pretrained_weight_dir="/mnt/user-ssd/songxingchen/share/modelscope/Llama-3.2-1B-Instruct"  # for continue pretrain
+pretrained_tokenizer_dir="/mnt/user-ssd/songxingchen/share/modelscope/Llama-3.2-1B-Instruct"
 
 if [ "${pretrained_weight_dir}" != "" ]; then
   exp_suffix="frompretrain"
@@ -47,7 +44,7 @@ test_sets="test_net test_meeting"
 
 param_dtype="bfloat16"
 seed=2026
-model_config=Llama-3.2-1B.json
+model_config=Llama-3_2-1B
 tensorboard_dir=tensorboard
 num_workers=12
 prefetch=12
@@ -55,12 +52,9 @@ num_mel_bins=80
 
 . ./parse_options.sh || exit 1;
 . ./path.sh --cache_prefix ${cache_prefix} \
-            --cuda_prefix ${cuda_prefix} \
-            --cuda_version ${cuda_version} \
-            --driver_version ${driver_version} \
-            --cudnn_version ${cudnn_version} || exit 1
+            --cuda_prefix ${cuda_prefix} || exit 1
 
-exp_id="wenetspeech_1x8192_fullac_cp1_tp1_dp8_pp1_stack5_stride4_flex_packloss_lagre1B_ar_std0.02_acc_normpreproc_wp2k_addpad_cb1024_emb16_${model_config}_${exp_suffix}"
+exp_id="wenetspeech_1x8192_noneac_cp1_tp1_dp8_pp1_stack5_stride4_flex_packloss_lagre1B_ar_std0.02_acc_normpreproc_wp2k_addpad_cb1024_emb16_${model_config}_${exp_suffix}_640k"
 cp=$(echo $exp_id | grep -oP 'cp\d+' | grep -oP '\d+')
 tp=$(echo $exp_id | grep -oP 'tp\d+' | grep -oP '\d+')
 dp=$(echo $exp_id | grep -oP 'dp\d+' | grep -oP '\d+')
@@ -83,9 +77,9 @@ if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
       mkdir -p data/${x}
       python touchnet/bin/make_data.py \
           --save_dir "data/${x}" \
-          --jsonl_path "/bucket/output/jfs-hdfs/user/Archive/ASR/testset/universal_scienceTrainTest/wenetspeech.raw/list/${x}.data.list.raw.fix" \
+          --jsonl_path "/mnt/user-ssd/songxingchen/workspace/wenet/examples/wenetspeech/s0/data/${x}/data.list" \
           --num_utt_per_shard 2000 \
-          --num_workers 32 \
+          --num_workers 64 \
           --datatypes "audio+metainfo"
     fi
   done
@@ -116,7 +110,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --tokenizer_bestrq_emb_size 16 \
       --tokenizer_bestrq_init_seed ${seed} \
       --tokenizer_bestrq_init_method "default" \
-      --datapipe_type "audio+metainfo" \
+      --datapipe_type "touch_audio" \
       --datalist_path "data/${train_set}/data.list" \
       --datalist_dev_path "data/${dev_set}/data.list" \
       --datalist_sharding true \
@@ -161,7 +155,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --training_description "wenetspeech ssl" \
       --training_seed "${seed}" \
       --training_model_name "llama.asr" \
-      --training_model_config_path "config/${model_config}" \
+      --training_model_config_path "config/${model_config}.json" \
       --training_print_args true \
       --training_trace_dump_folder "exp/${exp_id}" \
       --training_fsdp_reshard_after_forward "default" \
@@ -175,7 +169,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --training_ckpt_load_step -1 \
       --training_ckpt_interval 2000 \
       --training_ckpt_keep_latest_k 2 \
-      --training_log_freq 1 \
+      --training_log_freq 100 \
       --training_enable_tensorboard true \
       --training_save_tb_folder "tensorboard" \
       --training_tb_rank_0_only true \
@@ -186,7 +180,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --training_gc_freq 1000 \
       --training_deterministic false \
       --training_max_norm 5.0 \
-      --training_activation_checkpoint_mode "full" \
+      --training_activation_checkpoint_mode "none" \
       --training_activation_checkpoint_selective_ac_option "op" \
       --training_enable_profiling true \
       --training_profiling_traces_folder "profile_traces" \
@@ -197,7 +191,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --optimizer_name "AdamW" \
       --optimizer_lr 8e-4 \
       --optimizer_impl "fused" \
-      --lr_scheduler_steps 260000 \
+      --lr_scheduler_steps 640000 \
       --lr_scheduler_warmup_steps 2000 \
       --lr_scheduler_decay_type "linear" \
       --lr_scheduler_lr_min 0.0
@@ -208,6 +202,6 @@ if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then
   python touchnet/bin/convert_dcp_to_hf.py \
     --ckpt_dir "exp/${exp_id}" \
     --step 260000 \
-    --config "config/${model_config}" \
+    --config "config/${model_config}.json" \
     --tokenizer_model "${pretrained_tokenizer_dir}"
 fi
