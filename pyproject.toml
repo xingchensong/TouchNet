@@ -11,9 +11,9 @@ authors = [
 keywords = ["pytorch", "training", "llm", "mllm"]
 dependencies = [
     # Hugging Face integrations
-    "datasets>=3.5.0",
-    "transformers>=4.51.3",
-    "tokenizers>=0.21.1",
+    "datasets==3.5.0",
+    "transformers==4.51.3",
+    "tokenizers==0.21.1",
 
     # Torch
     "torchdata>=0.11.0",
