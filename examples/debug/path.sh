@@ -3,8 +3,8 @@ cache_prefix=/mnt/user-ssd/songxingchen/share
 
 . ./parse_options.sh || exit 1;
 
-if [ ! -d "${cuda_prefix}" ]; then
-    echo "Error: CUDA_HOME directory does not exist: ${cuda_prefix}"
+if [ ! -d "${cuda_prefix}/cuda" ]; then
+    echo "Error: CUDA_HOME directory does not exist: ${cuda_prefix}/cuda"
     exit 1
 fi
 if [ ! -d "${cache_prefix}" ]; then
