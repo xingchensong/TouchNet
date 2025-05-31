@@ -1,14 +1,19 @@
-# cuda related
-unset LD_LIBRARY_PATH
-cuda_prefix=/bucket/output/jfs-hdfs/user/xingchen.song/tools/cuda
-cache_prefix=/bucket/output/jfs-hdfs/user/xingchen.song/share
-cuda_version=12.6.3
-driver_version=560.35.05
-cudnn_version=9.5.1.17
+cuda_prefix=/usr/local
+cache_prefix=/mnt/user-ssd/songxingchen/share
 
 . ./parse_options.sh || exit 1;
 
-export CUDA_HOME=${cuda_prefix}/cuda-${cuda_version}_cudnn-${cudnn_version}
+if [ ! -d "${cuda_prefix}" ]; then
+    echo "Error: CUDA_HOME directory does not exist: ${cuda_prefix}"
+    exit 1
+fi
+if [ ! -d "${cache_prefix}" ]; then
+    echo "Error: cache_prefix directory does not exist: ${cache_prefix}"
+    exit 1
+fi
+
+# cuda related
+export CUDA_HOME=${cuda_prefix}/cuda
 export PATH=$CUDA_HOME/bin:$PATH
 export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$CUDA_HOME/lib64/stubs:/usr/lib:/usr/lib64:$LD_LIBRARY_PATH
 export LD_LIBRARY_PATH=$CUDA_HOME/extras/CUPTI/lib64:$LD_LIBRARY_PATH
