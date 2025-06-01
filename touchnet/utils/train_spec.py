@@ -6,7 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from dataclasses import dataclass
-from typing import Callable, Optional, Type, TypeAlias
+from typing import Callable, Type
 
 import torch
 import torch.nn as nn
@@ -19,16 +19,6 @@ from touchnet.tokenizer.tokenizer import BaseTokenizer
 from touchnet.utils.metrics import MetricsProcessor
 from touchnet.utils.optimizer import LRSchedulersContainer, OptimizersContainer
 
-OptimizersBuilder: TypeAlias = Callable[
-    [list[nn.Module], TrainConfig], OptimizersContainer
-]
-LRSchedulersBuilder: TypeAlias = Callable[[OptimizersContainer], LRSchedulersContainer]
-LossFunction: TypeAlias = Callable[..., torch.Tensor]
-AccFunction: TypeAlias = Callable[..., torch.Tensor]
-DataLoaderBuilder: TypeAlias = Callable[..., BaseDataLoader]
-TokenizerBuilder: TypeAlias = Callable[..., BaseTokenizer]
-MetricsProcessorBuilder: TypeAlias = Callable[..., MetricsProcessor]
-
 
 @dataclass
 class TrainSpec:
@@ -39,15 +29,16 @@ class TrainSpec:
     pipelining_fn: Callable[
         [nn.Module], tuple[_PipelineSchedule, list[nn.Module], bool, bool]
     ]
-    build_optimizers_fn: OptimizersBuilder
-    build_lr_schedulers_fn: LRSchedulersBuilder
-    build_dataloader_fn: DataLoaderBuilder
-    build_tokenizer_fn: TokenizerBuilder
-    loss_fn: LossFunction
-    acc_fn: AccFunction
+    build_optimizers_fn: Callable[[list[nn.Module], TrainConfig], OptimizersContainer]
+    build_lr_schedulers_fn: Callable[[OptimizersContainer], LRSchedulersContainer]
+    build_dataloader_fn: Callable[..., BaseDataLoader]
+    build_tokenizer_fn: Callable[..., BaseTokenizer]
+    loss_fn: Callable[..., torch.Tensor]
+    acc_fn: Callable[..., torch.Tensor]
     additional_post_init_fn: Callable[[nn.Module, torch.device], None]
     get_num_flop_per_token_fn: Callable[[int, AutoConfig, int], int]
-    build_metrics_processor_fn: Optional[MetricsProcessorBuilder] = None
+    get_num_params_fn: Callable[..., int]
+    build_metrics_processor_fn: Callable[..., MetricsProcessor]
 
 
 _train_specs = {}
