@@ -86,6 +86,12 @@ class InferenceConfig:
 
 
 class AudioDataset(Dataset):
+    """
+    PyTorch Dataset for loading audio files with metadata.
+
+    Each data sample is a JSON dict containing audio file path and metadata.
+    Audio files are loaded and normalized to float32 range [-1, 1].
+    """
 
     def __init__(self, data_list):
         self.data = []
@@ -99,9 +105,13 @@ class AudioDataset(Dataset):
 
     def __getitem__(self, idx):
         info = self.data[idx]
-        audio = load_audio(info["wav"])
-        audio = audio.astype(numpy.float32) / 32768.0
-        return info, audio
+        try:
+            audio = load_audio(info["wav"])
+            audio = audio.astype(numpy.float32) / 32768.0
+            return info, audio
+        except Exception as e:
+            print(f"Error loading audio file {info['wav']}: {e}")
+            return None, None
 
 
 def collate_fn(batch):
