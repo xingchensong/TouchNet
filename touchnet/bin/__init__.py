@@ -643,6 +643,26 @@ class CkptConverterConfig:
             ),
         },
     )
+    tmp_dir: str = field(
+        default="/mnt/bos-multimodal/users/songxingchen",
+        metadata={
+            "help": (
+                "only used in dcp2hf.",
+            ),
+        },
+    )
+    model_type: str = field(
+        default="causal_lm",
+        metadata={
+            "help": ("model type."),
+            "choices": [
+                "causal_lm",
+                "touch_audio",
+                "qwen2_audio",
+                "kimi_audio",
+            ],
+        },
+    )
     config: str = field(
         default=None,
         metadata={
