@@ -96,27 +96,37 @@ def _apply_ac_to_transformer_block(module: nn.Module, ac_config: TrainConfig):
             return module
 
 
-def apply_ac(model: AutoModelForCausalLM, ac_config: TrainConfig):
+def apply_ac(model: AutoModelForCausalLM, ac_config: TrainConfig,
+             base_model_prefix: str = None, base_layers_prefix: str = None):
     """Apply activation checkpointing to the model."""
-    base_model_prefix = getattr(model, "base_model_prefix", "model")
+    if base_model_prefix is None:
+        base_model_prefix = getattr(model, "base_model_prefix", "model")
     submodel = getattr(model, f"{base_model_prefix}")
-    for layer_id, transformer_block in submodel.layers.named_children():
+    if base_layers_prefix is None:
+        base_layers_prefix = "layers"
+    layers = getattr(submodel, f"{base_layers_prefix}")
+    for layer_id, transformer_block in layers.named_children():
         transformer_block = _apply_ac_to_transformer_block(transformer_block, ac_config)
-        submodel.layers.register_module(layer_id, transformer_block)
+        layers.register_module(layer_id, transformer_block)
 
     logger.info(f"Applied {ac_config.training_activation_checkpoint_mode} activation checkpointing to the model")
 
 
-def apply_compile(model: AutoModelForCausalLM):
+def apply_compile(model: AutoModelForCausalLM,
+                  base_model_prefix: str = None, base_layers_prefix: str = None):
     """
     Apply torch.compile to each TransformerBlock, which makes compilation efficient due to
     repeated structure. Alternatively one can compile the whole model (after applying DP).
     """
-    base_model_prefix = getattr(model, "base_model_prefix", "model")
+    if base_model_prefix is None:
+        base_model_prefix = getattr(model, "base_model_prefix", "model")
     submodel = getattr(model, f"{base_model_prefix}")
-    for layer_id, transformer_block in submodel.layers.named_children():
+    if base_layers_prefix is None:
+        base_layers_prefix = "layers"
+    layers = getattr(submodel, f"{base_layers_prefix}")
+    for layer_id, transformer_block in layers.named_children():
         transformer_block = torch.compile(transformer_block, fullgraph=True)
-        submodel.layers.register_module(layer_id, transformer_block)
+        layers.register_module(layer_id, transformer_block)
 
     logger.info("Compiling each TransformerBlock with torch.compile")
 
@@ -129,6 +139,9 @@ def apply_fsdp(
     pp_enabled: bool,
     cpu_offload: bool = False,
     reshard_after_forward_policy: str = "default",
+    base_model_prefix: str = None,
+    base_layers_prefix: str = None,
+    shard_on_toplevel_model: bool = True,
 ):
     """
     Apply data parallelism (via FSDP2) to the model.
@@ -152,12 +165,16 @@ def apply_fsdp(
     if cpu_offload:
         fsdp_config["offload_policy"] = CPUOffloadPolicy()
 
-    base_model_prefix = getattr(model, "base_model_prefix", "model")
+    if base_model_prefix is None:
+        base_model_prefix = getattr(model, "base_model_prefix", "model")
     submodel = getattr(model, f"{base_model_prefix}")
-    if isinstance(submodel.layers, nn.ModuleDict):
-        layer_items = [(int(k), v) for (k, v) in submodel.layers.items()]
+    if base_layers_prefix is None:
+        base_layers_prefix = "layers"
+    layers = getattr(submodel, f"{base_layers_prefix}")
+    if isinstance(layers, nn.ModuleDict):
+        layer_items = [(int(k), v) for (k, v) in layers.items()]
     else:
-        layer_items = list(enumerate(submodel.layers))
+        layer_items = list(enumerate(layers))
     for layer_id, transformer_block in layer_items:
         if reshard_after_forward_policy == "always":
             reshard_after_forward = True
@@ -181,9 +198,8 @@ def apply_fsdp(
             **fsdp_config,
             reshard_after_forward=reshard_after_forward,
         )
-    # FIXME(xcsong): model or submodel?
-    # fully_shard(submodel, **fsdp_config, reshard_after_forward=not pp_enabled)
-    fully_shard(model, **fsdp_config, reshard_after_forward=not pp_enabled)
+    if shard_on_toplevel_model:
+        fully_shard(model, **fsdp_config, reshard_after_forward=not pp_enabled)
 
 
 def apply_ddp(
