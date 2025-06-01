@@ -179,6 +179,7 @@ class HuggingFaceTokenizer(BaseTokenizer):
             # TODO(bnorick): download tokenizer once to lustre and use force offline to make sure all tasks read it from there
             self._tokenizer = transformers.AutoTokenizer.from_pretrained(
                 pretrained_model_name_or_path=self.pretrained_model_name_or_path,
+                trust_remote_code=True,
                 **self.kwargs
             )
             self._vocab = self._tokenizer.get_vocab()
