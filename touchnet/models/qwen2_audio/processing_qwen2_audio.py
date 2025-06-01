@@ -14,6 +14,21 @@ QWEN2_AUDIO_TEMPLATE_FOR_S2T = "<|audio_bos|><|AUDIO|><|audio_eos|><|INSTRUCT|>"
 
 
 def dynamic_batch(data, config: DataConfig, processor: Qwen2AudioProcessor):
+    """
+    Dynamic batching function for Qwen2Audio training data.
+
+    Processes audio waveforms and instruction-response pairs into model input
+    features with proper padding and attention masks.
+
+    Args:
+        data: Iterator of training samples with waveform, instruct, and response
+        config: DataConfig containing batching and filtering parameters
+        processor: Qwen2AudioProcessor for tokenization and feature extraction
+
+    Yields:
+        Dict containing batched tensors ready for model training
+    """
+
     input_ids_buf, attention_mask_buf, labels_buf, sentence_lens_buf = [], [], [], []
     input_features_buf, feature_attention_mask_buf = [], []
     longest_length = 0
