@@ -81,7 +81,7 @@ def test_dataloader(nnodes, nproc_per_node, max_epoch, num_workers, dp_rank, dp_
 
     # resume from mid-checkpoint
     if len(state_dict.keys()) > 0:
-        datapipe = TouchDatapipe(config, dp_rank, dp_worldsize)
+        datapipe = LowLevelTouchDatapipe(config, dp_rank, dp_worldsize)
         dataloader = ParallelAwareDataloader(
             dataset=datapipe,
             dp_rank=dp_rank,
