@@ -18,6 +18,13 @@ from touchnet.models.touch_audio.configuration_touch_audio import TouchAudioConf
 
 # TODO(xcsong): switch to Qwen
 class TouchAudioForCausalLM(LlamaForCausalLM):
+    """
+    TouchAudio model for causal language modeling that extends LlamaForCausalLM
+    with audio input support through a linear projection layer.
+
+    This model projects audio embeddings to the hidden size before feeding them
+    to the base Llama model, enabling audio-based language generation tasks.
+    """
     config_class = TouchAudioConfig
 
     def __init__(self, config: TouchAudioConfig):

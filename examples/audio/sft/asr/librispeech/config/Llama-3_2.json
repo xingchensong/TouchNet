@@ -1,6 +1,6 @@
 {
   "architectures": [
-    "LlamaForASR"
+    "TouchAudioForCausalLM"
   ],
   "attn_implementation": "flex_attention",
   "input_size": 560,
