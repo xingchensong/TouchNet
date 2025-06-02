@@ -4,9 +4,9 @@
 from transformers.models.llama.configuration_llama import LlamaConfig
 
 
-class LlamaForASRConfig(LlamaConfig):
+class TouchAudioConfig(LlamaConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LlamaForASR`]. It is used to instantiate an LLaMA
+    This is the configuration class to store the configuration of a [`TouchAudioForCausalLM`]. It is used to instantiate an LLaMA
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the LLaMA-7B with a linear projector.
 
@@ -19,7 +19,7 @@ class LlamaForASRConfig(LlamaConfig):
             Dimension of the input representations (mel or fbank).
     """
 
-    model_type = "llama4asr"
+    model_type = "touch_audio"
 
     def __init__(
         self,
@@ -32,4 +32,4 @@ class LlamaForASRConfig(LlamaConfig):
         )
 
 
-__all__ = ["LlamaForASRConfig"]
+__all__ = ["TouchAudioConfig"]

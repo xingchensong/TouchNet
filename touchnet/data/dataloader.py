@@ -18,8 +18,9 @@ from torchdata.stateful_dataloader import StatefulDataLoader
 from touchnet.data import DataConfig
 from touchnet.models.kimi_audio.processing_kimi_audio import \
     kimi_audio_datapipe
-from touchnet.models.llama.processing_llama import (causal_lm_datapipe,
-                                                    touch_audio_datapipe)
+from touchnet.models.touch_audio.processing_touch_audio import \
+    touch_audio_datapipe
+from touchnet.models.llama.processing_llama import causal_lm_datapipe
 from touchnet.models.qwen2_audio.processing_qwen2_audio import \
     qwen2_audio_datapipe
 from touchnet.tokenizer.tokenizer import BaseTokenizer

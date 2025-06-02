@@ -132,7 +132,7 @@ def apply_tp(
         },
     )
 
-    if hasattr(model, 'projector'):  # LlamaForASR
+    if hasattr(model, 'projector'):  # TouchAudioForCausalLM
         parallelize_module(
             model,
             tp_mesh,
