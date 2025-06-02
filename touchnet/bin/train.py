@@ -334,18 +334,13 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                 batch[key] = batch[key].to(device_type)
 
         if self.parallel_dims.cp_enabled:
-            """
-            NOTE(flame): We need to carefully handle the position_ids for TP/CP
-            Depending on the Models'PE, the position_ids might be different.
-
-            e.g. for TP
-                For RoPE, all ranks have the same position_ids. [FOR HF model]
-                For sinusoidal, each rank has the coresponding chunked  position_ids. [FOR HF model]
-
-            e.g. for CP, [optional_context_parallel_ctx should automatically distbute the position_ids]
-                Each rank has the coresponding chunked position_ids. [FOR All model]
-
-            """
+            # NOTE(flame): We need to carefully handle the position_ids for TP/CP
+            # Depending on the Models'PE, the position_ids might be different.
+            # e.g. for TP
+            #     For RoPE, all ranks have the same position_ids. [FOR HF model]
+            #     For sinusoidal, each rank has the coresponding chunked  position_ids. [FOR HF model]
+            # e.g. for CP, [optional_context_parallel_ctx should automatically distbute the position_ids]
+            #     Each rank has the coresponding chunked position_ids. [FOR All model]
 
             labels, position_ids = batch["labels"], batch["position_ids"]
             attention_mask, sentence_lens = batch["attention_mask"], batch["sentence_lens"]

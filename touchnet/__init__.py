@@ -8,9 +8,9 @@ from transformers.models.llama import LlamaConfig, LlamaForCausalLM
 from transformers.models.qwen2_audio import (
     Qwen2AudioConfig, Qwen2AudioForConditionalGeneration)
 
-import touchnet
 from touchnet.data.dataloader import build_dataloader
 from touchnet.loss.cross_entropy import cross_entropy_loss
+from touchnet.models import kimi_audio, llama, qwen2_audio
 from touchnet.models.kimi_audio.configuration_kimi_audio import KimiAudioConfig
 from touchnet.models.kimi_audio.modeling_kimi_audio import \
     MoonshotKimiaForCausalLM
@@ -41,10 +41,10 @@ register_train_spec(
         build_tokenizer_fn=build_tokenizer,
         loss_fn=cross_entropy_loss,
         acc_fn=accuracy,
-        additional_post_init_fn=touchnet.models.llama.post_init,
+        additional_post_init_fn=llama.post_init,
         build_metrics_processor_fn=build_metrics_processor,
-        get_num_flop_per_token_fn=touchnet.models.llama.get_num_flop_per_token,
-        get_num_params_fn=touchnet.models.llama.get_num_params,
+        get_num_flop_per_token_fn=llama.get_num_flop_per_token,
+        get_num_params_fn=llama.get_num_params,
     )
 )
 
@@ -61,10 +61,10 @@ register_train_spec(
         build_tokenizer_fn=build_tokenizer,
         loss_fn=cross_entropy_loss,
         acc_fn=accuracy,
-        additional_post_init_fn=touchnet.models.llama.post_init,
+        additional_post_init_fn=llama.post_init,
         build_metrics_processor_fn=build_metrics_processor,
-        get_num_flop_per_token_fn=touchnet.models.llama.get_num_flop_per_token,
-        get_num_params_fn=touchnet.models.llama.get_num_params,
+        get_num_flop_per_token_fn=llama.get_num_flop_per_token,
+        get_num_params_fn=llama.get_num_params,
     )
 )
 
@@ -81,10 +81,10 @@ register_train_spec(  # TODO(xcsong): We only support FSDP2 for qwen2_audio, no 
         build_tokenizer_fn=build_tokenizer,
         loss_fn=cross_entropy_loss,
         acc_fn=accuracy,
-        additional_post_init_fn=touchnet.models.qwen2_audio.post_init,
+        additional_post_init_fn=qwen2_audio.post_init,
         build_metrics_processor_fn=build_metrics_processor,
-        get_num_flop_per_token_fn=touchnet.models.qwen2_audio.get_num_flop_per_token,
-        get_num_params_fn=touchnet.models.qwen2_audio.get_num_params,
+        get_num_flop_per_token_fn=qwen2_audio.get_num_flop_per_token,
+        get_num_params_fn=qwen2_audio.get_num_params,
     )
 )
 
@@ -101,10 +101,10 @@ register_train_spec(  # TODO(xcsong): We only support FSDP2 for kimi_audio, no t
         build_tokenizer_fn=build_tokenizer,
         loss_fn=cross_entropy_loss,
         acc_fn=accuracy,
-        additional_post_init_fn=touchnet.models.kimi_audio.post_init,
+        additional_post_init_fn=kimi_audio.post_init,
         build_metrics_processor_fn=build_metrics_processor,
-        get_num_flop_per_token_fn=touchnet.models.kimi_audio.get_num_flop_per_token,
-        get_num_params_fn=touchnet.models.kimi_audio.get_num_params,
+        get_num_flop_per_token_fn=kimi_audio.get_num_flop_per_token,
+        get_num_params_fn=kimi_audio.get_num_params,
     )
 )
 
