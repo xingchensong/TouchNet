@@ -1,23 +1,9 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) 2025, Xingchen Song(sxc19@tsinghua.org.cn)
 
-from typing import Tuple
-
 import torch
-from transformers import AutoConfig, AutoModelForCausalLM
 from transformers.models.llama import LlamaConfig, LlamaForCausalLM
 from transformers.models.llama.modeling_llama import LlamaRMSNorm
-
-from touchnet.data.dataloader import build_dataloader
-from touchnet.loss.cross_entropy import cross_entropy_loss
-from touchnet.models.llama.configuration_llama import LlamaForASRConfig
-from touchnet.models.llama.modeling_llama import LlamaForASR
-from touchnet.models.llama.parallelize_llama import parallelize_llama
-from touchnet.models.llama.pipeline_llama import pipeline_llama
-from touchnet.tokenizer.tokenizer import build_tokenizer
-from touchnet.utils.metrics import accuracy, build_metrics_processor
-from touchnet.utils.optimizer import build_lr_schedulers, build_optimizers
-from touchnet.utils.train_spec import TrainSpec, register_train_spec
 
 
 def post_init(model: LlamaForCausalLM, init_device: torch.device):
@@ -61,43 +47,14 @@ def get_num_flop_per_token(num_params: int, model_config: LlamaConfig, seq_len: 
     return flop_per_token
 
 
-register_train_spec(
-    TrainSpec(
-        name="llama",
-        model_cls=LlamaForCausalLM,
-        config_cls=LlamaConfig,
-        parallelize_fn=parallelize_llama,
-        pipelining_fn=pipeline_llama,
-        build_optimizers_fn=build_optimizers,
-        build_lr_schedulers_fn=build_lr_schedulers,
-        build_dataloader_fn=build_dataloader,
-        build_tokenizer_fn=build_tokenizer,
-        loss_fn=cross_entropy_loss,
-        acc_fn=accuracy,
-        additional_post_init_fn=post_init,
-        build_metrics_processor_fn=build_metrics_processor,
-        get_num_flop_per_token_fn=get_num_flop_per_token,
-    )
-)
-
-register_train_spec(
-    TrainSpec(
-        name="llama.asr",
-        model_cls=LlamaForASR,
-        config_cls=LlamaForASRConfig,
-        parallelize_fn=parallelize_llama,
-        pipelining_fn=pipeline_llama,
-        build_optimizers_fn=build_optimizers,
-        build_lr_schedulers_fn=build_lr_schedulers,
-        build_dataloader_fn=build_dataloader,
-        build_tokenizer_fn=build_tokenizer,
-        loss_fn=cross_entropy_loss,
-        acc_fn=accuracy,
-        additional_post_init_fn=post_init,
-        build_metrics_processor_fn=build_metrics_processor,
-        get_num_flop_per_token_fn=get_num_flop_per_token,
-    )
-)
-
-AutoConfig.register(LlamaForASRConfig.model_type, LlamaForASRConfig, True)
-AutoModelForCausalLM.register(LlamaForASRConfig, LlamaForASR, True)
+def get_num_params(model: torch.nn.Module, exclude_embedding: bool = False) -> int:
+    num_params = sum(p.numel() for p in model.parameters())
+    if exclude_embedding:
+        base_model_prefix = getattr(model, "base_model_prefix", "model")
+        submodel = getattr(model, f"{base_model_prefix}")
+        num_params -= sum(
+            sum(p.numel() for p in m.parameters())
+            for m in submodel.children()
+            if isinstance(m, torch.nn.Embedding)
+        )
+    return num_params

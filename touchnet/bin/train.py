@@ -23,16 +23,15 @@ from touchnet.data import DataConfig
 from touchnet.data.dataloader import BaseDataLoader
 from touchnet.tokenizer import TokenizerConfig
 from touchnet.utils.checkpoint import CheckpointManager
-from touchnet.utils.distributed import (GarbageCollection, ParallelDims,
-                                        clip_grad_norm_,
+from touchnet.utils.distributed import (TORCH_DTYPE_MAP, GarbageCollection,
+                                        ParallelDims, clip_grad_norm_,
                                         create_context_parallel_ctx,
                                         device_module, device_type, dist_max,
                                         dist_mean, dist_min, dist_sum,
                                         get_train_context, init_distributed,
                                         set_determinism, set_pg_timeouts)
 from touchnet.utils.logging import init_logger, logger
-from touchnet.utils.metrics import (MetricsProcessor, ensure_pp_loss_visible,
-                                    get_num_params)
+from touchnet.utils.metrics import MetricsProcessor, ensure_pp_loss_visible
 from touchnet.utils.optimizer import LRSchedulersContainer, OptimizersContainer
 from touchnet.utils.profiling import (maybe_enable_memory_snapshot,
                                       maybe_enable_profiling)
@@ -124,15 +123,19 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             job_config.training_compile = False  # TODO(xcsong): support flex_attention with torch.compile
 
         # build dataloader
-        tokenizer = self.train_spec.build_tokenizer_fn(
-            tokenizer_config,
-            bos_token=model_config.bos_token,
-            eos_token=model_config.eos_token,
-            pad_token=model_config.pad_token,
-        )
-        assert model_config.vocab_size == tokenizer.vocab_size
-        assert model_config.bos_token_id == tokenizer.bos
-        assert model_config.eos_token_id == tokenizer.eos
+        if hasattr(model_config, 'bos_token'):
+            special_tokens = {"bos_token": model_config.bos_token}
+            if hasattr(model_config, 'eos_token'):
+                special_tokens["eos_token"] = model_config.eos_token
+            if hasattr(model_config, 'pad_token'):
+                special_tokens["pad_token"] = model_config.pad_token
+            tokenizer = self.train_spec.build_tokenizer_fn(
+                tokenizer_config, **special_tokens,
+            )
+        else:
+            tokenizer = self.train_spec.build_tokenizer_fn(
+                tokenizer_config
+            )
         self.dataloader = self.train_spec.build_dataloader_fn(
             tokenizer=tokenizer,
             data_config=data_config,
@@ -166,8 +169,8 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         color = self.metrics_processor.color
 
         # log model size
-        model_param_count = get_num_params(model, exclude_embedding=False)
-        model_param_count_wo_emb = get_num_params(model, exclude_embedding=True)
+        model_param_count = self.train_spec.get_num_params_fn(model, exclude_embedding=False)
+        model_param_count_wo_emb = self.train_spec.get_num_params_fn(model, exclude_embedding=True)
         self.metrics_processor.num_flop_per_token = self.train_spec.get_num_flop_per_token_fn(
             model_param_count_wo_emb,
             model_config,
@@ -232,38 +235,34 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             # confirm that user will be able to view loss metrics on the console
             ensure_pp_loss_visible(self.parallel_dims, job_config, color)
         else:
-            """
-            NOTE(xcsong): apply PT-D Tensor Parallel, activation checkpointing, torch.compile, Data Parallel
-            NOTE(xcsong): Before parallelizing the model, `model.lm_head` looks like:
-                tensor(..., device='meta', size=(vocab_size, hidden), dtype=torch.bfloat16, requires_grad=True)
-            """
+            # NOTE(xcsong): apply PT-D Tensor Parallel, activation checkpointing, torch.compile, Data Parallel
+            # NOTE(xcsong): Before parallelizing the model, `model.lm_head` looks like:
+            #     tensor(..., device='meta', size=(vocab_size, hidden), dtype=torch.bfloat16, requires_grad=True)
             model = self.train_spec.parallelize_fn(
                 model, self.world_mesh, self.parallel_dims, job_config
             )
-            """
-            NOTE(xcsong): Assume dp=2 cp=4, after parallelizing the model, `model.lm_head` looks like:
-                DTensor(local_tensor=tensor(..., device='meta', size=(vocab_size // dp // cp, hidden),
-                                            dtype=torch.bfloat16),
-                        device_mesh=DeviceMesh('cuda', [0, 1, 2, 3, 4, 5, 6, 7],
-                        mesh_dim_names=('dp_shard_cp',)),
-                        placements=(Shard(dim=0),))
-            NOTE(xcsong): Assume dp=2, cp=2, tp=2, after parallelizing the model, `model.lm_head` looks like:
-                DTensor(local_tensor=tensor(..., device='meta', size=(vocab_size // dp // cp // tp, hidden),
-                                            dtype=torch.bfloat16),
-                        device_mesh=DeviceMesh('cuda', [[0, 1], [2, 3], [4, 5], [6, 7]],
-                        mesh_dim_names=('dp_shard_cp', 'tp')),
-                        placements=(_StridedShard(dim=0, sf=2), Shard(dim=0)))
-            """
+            # NOTE(xcsong): Assume dp=2 cp=4, after parallelizing the model, `model.lm_head` looks like:
+            #     DTensor(local_tensor=tensor(..., device='meta', size=(vocab_size // dp // cp, hidden),
+            #                                 dtype=torch.bfloat16),
+            #             device_mesh=DeviceMesh('cuda', [0, 1, 2, 3, 4, 5, 6, 7],
+            #             mesh_dim_names=('dp_shard_cp',)),
+            #             placements=(Shard(dim=0),))
+            # NOTE(xcsong): Assume dp=2, cp=2, tp=2, after parallelizing the model, `model.lm_head` looks like:
+            #     DTensor(local_tensor=tensor(..., device='meta', size=(vocab_size // dp // cp // tp, hidden),
+            #                                 dtype=torch.bfloat16),
+            #             device_mesh=DeviceMesh('cuda', [[0, 1], [2, 3], [4, 5], [6, 7]],
+            #             mesh_dim_names=('dp_shard_cp', 'tp')),
+            #             placements=(_StridedShard(dim=0, sf=2), Shard(dim=0)))
             model.to_empty(device=init_device)
-            """
-            NOTE(xcsong): to_empty() will allocate real memories on init_device for all meta-tensors,
-                Without post_init(), the values of these tensors are undefined, and there may be NaNs.
-                We also need to pay attention to the correct initialization of non-persistent buffers (such as rope).
-            """
+            # NOTE(xcsong): to_empty() will allocate real memories on init_device for all meta-tensors,
+            #     Without post_init(), the values of these tensors are undefined, and there may be NaNs.
+            #     We also need to pay attention to the correct initialization of non-persistent buffers (such as rope).
             with torch.no_grad():
                 model.post_init()
                 self.train_spec.additional_post_init_fn(model, init_device)
             model.train()
+            # NOTE(xcsong): force to convert parameter dtype to float32 for better convergency
+            model = model.to(TORCH_DTYPE_MAP["float32"])
 
             self.model_parts = [model]
 
@@ -318,77 +317,67 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         if perf:
             data_load_start = time.perf_counter()
         batch = next(data_iterator)
-        labels, position_ids = batch["labels"], batch["position_ids"]
-        inputs_embeds = batch["inputs_embeds"]
-        input_ids = batch["input_ids"]
-        sentence_ids = batch["sentence_ids"]
-        sentence_lens = batch["sentence_lens"]
         num_sentence = batch["num_sentence"]
         if self.parallel_dims.dp_enabled:
             # NOTE(xcsong): we use global-batch, so we need to sum num_sentence
             num_sentence = torch.tensor(num_sentence, dtype=torch.int64).to(device_type)
             num_sentence = dist_sum(num_sentence, mesh=self.world_mesh["dp"])
+        batch["num_sentence"] = num_sentence
         if perf:
-            self.metrics_processor.ntokens_since_last_log += labels.numel()
+            self.metrics_processor.ntokens_since_last_log += batch["labels"].numel()
             self.metrics_processor.data_loading_times.append(
                 time.perf_counter() - data_load_start
             )
 
-        """
-        NOTE(flame): We need to carefully handle the position_ids for TP/CP
-        Depending on the Models'PE, the position_ids might be different.
+        for key in batch.keys():
+            if batch[key] is not None and torch.is_tensor(batch[key]):
+                batch[key] = batch[key].to(device_type)
 
-        e.g. for TP
-            For RoPE, all ranks have the same position_ids. [FOR HF model]
-            For sinusoidal, each rank has the coresponding chunked  position_ids. [FOR HF model]
+        if self.parallel_dims.cp_enabled:
+            """
+            NOTE(flame): We need to carefully handle the position_ids for TP/CP
+            Depending on the Models'PE, the position_ids might be different.
 
-        e.g. for CP, [optional_context_parallel_ctx should automatically distbute the position_ids]
-            Each rank has the coresponding chunked position_ids. [FOR All model]
+            e.g. for TP
+                For RoPE, all ranks have the same position_ids. [FOR HF model]
+                For sinusoidal, each rank has the coresponding chunked  position_ids. [FOR HF model]
 
-        """
-        labels = labels.to(device_type)
-        position_ids = position_ids.to(device_type)
-        sentence_ids = sentence_ids.to(device_type)
-        sentence_lens = sentence_lens.to(device_type)
+            e.g. for CP, [optional_context_parallel_ctx should automatically distbute the position_ids]
+                Each rank has the coresponding chunked position_ids. [FOR All model]
 
-        cp_buffers = [labels, position_ids, sentence_ids, sentence_lens]
-        cp_no_restore_buffers = [labels, position_ids, sentence_ids, sentence_lens]
-        cp_seq_dims = [1, 1, 1, 1]
-        if inputs_embeds is not None:
-            inputs_embeds = inputs_embeds.to(device_type)
-            cp_buffers.append(inputs_embeds)
-            cp_no_restore_buffers.append(inputs_embeds)
-            cp_seq_dims.append(1)
-        if input_ids is not None:
-            input_ids = input_ids.to(device_type)
-            cp_buffers.append(input_ids)
-            cp_no_restore_buffers.append(input_ids)
-            cp_seq_dims.append(1)
+            """
 
-        # apply context parallelism if cp is enabled
-        # ensure CP handles the separate freqs_cis buffer for each pp stage
-        optional_context_parallel_ctx = (
-            create_context_parallel_ctx(
+            labels, position_ids = batch["labels"], batch["position_ids"]
+            attention_mask, sentence_lens = batch["attention_mask"], batch["sentence_lens"]
+            inputs_embeds = batch.get("inputs_embeds", None)
+            input_ids = batch.get("input_ids", None)
+            cp_buffers = [labels, position_ids, attention_mask, sentence_lens]
+            cp_no_restore_buffers = [labels, position_ids, attention_mask, sentence_lens]
+            cp_seq_dims = [1, 1, 1, 1]
+            if inputs_embeds is not None:
+                cp_buffers.append(inputs_embeds)
+                cp_no_restore_buffers.append(inputs_embeds)
+                cp_seq_dims.append(1)
+            if input_ids is not None:
+                cp_buffers.append(input_ids)
+                cp_no_restore_buffers.append(input_ids)
+                cp_seq_dims.append(1)
+
+            # apply context parallelism if cp is enabled
+            # ensure CP handles the separate freqs_cis buffer for each pp stage
+            optional_context_parallel_ctx = create_context_parallel_ctx(
                 cp_mesh=self.world_mesh["cp"],
                 cp_buffers=cp_buffers,
                 cp_seq_dims=cp_seq_dims,
                 cp_no_restore_buffers=set(cp_no_restore_buffers),
                 cp_rotate_method=self.job_config.training_context_parallel_rotate_method,
             )
-            if self.parallel_dims.cp_enabled
-            else None
-        )
+        else:
+            optional_context_parallel_ctx = None
 
-        return {
-            "input_ids": input_ids,          # [bs, seq_len]
-            "inputs_embeds": inputs_embeds,  # [bs, seq_len, dim]
-            "sentence_ids": sentence_ids,    # [bs, seq_len]
-            "sentence_lens": sentence_lens,  # [bs, seq_len]
-            "labels": labels,                # [bs, seq_len]
-            "position_ids": position_ids,    # [bs, seq_len]
-            "num_sentence": num_sentence,    # [1,]
-            "optional_context_parallel_ctx": optional_context_parallel_ctx,
-        }
+        batch["optional_context_parallel_ctx"] = optional_context_parallel_ctx
+
+        return batch
 
     def train_step(self, data: Dict[str, Any]):
         self.optimizers.zero_grad()
@@ -427,19 +416,17 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             )
         else:
             # Non-PP forward / backward
-            with self.train_context(data["optional_context_parallel_ctx"]):
+            with self.train_context(data.pop("optional_context_parallel_ctx")):
                 assert len(self.model_parts) == 1
-                pred = self.model_parts[0](
-                    input_ids=data["input_ids"],
-                    inputs_embeds=data["inputs_embeds"],
-                    position_ids=data["position_ids"],
-                    attention_mask=data["sentence_ids"] if self.use_flex_attention else None,
-                )
+                labels = data.pop("labels")
+                num_sentence = data.pop("num_sentence")
+                sentence_lens = data.pop("sentence_lens")
+                pred = self.model_parts[0](**data)
                 # logits.shape = pred[0].shape = (bs, seq_len // cp, vocab_size // tp) if logits.to_local()
                 #                           else (bs, seq_len // cp, vocab_size) if logits.full_tensor()
                 loss_per_sample, loss_per_token = self.train_spec.loss_fn(
-                    pred[0], data["labels"], data["sentence_lens"], data["num_sentence"])  # (1,), (1,)
-                acc = self.train_spec.acc_fn(pred[0], data["labels"])
+                    pred[0], labels, sentence_lens, num_sentence)  # (1,), (1,)
+                acc = self.train_spec.acc_fn(pred[0], labels)
                 # need to free to before bwd to avoid peaking memory
                 del pred
                 loss_per_sample.backward()
@@ -543,18 +530,16 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             raise NotImplementedError("TODO(xcsong): support PP.")
         else:
             # Non-PP forward
-            with self.train_context(data["optional_context_parallel_ctx"]):
+            with self.train_context(data.pop("optional_context_parallel_ctx")):
                 assert len(self.model_parts) == 1
-                pred = self.model_parts[0](
-                    input_ids=data["input_ids"],
-                    inputs_embeds=data["inputs_embeds"],
-                    position_ids=data["position_ids"],
-                    attention_mask=data["sentence_ids"] if self.use_flex_attention else None,
-                )
+                labels = data.pop("labels")
+                num_sentence = data.pop("num_sentence")
+                sentence_lens = data.pop("sentence_lens")
+                pred = self.model_parts[0](**data)
                 # logits.shape = pred[0].shape = (bs, seq_len // cp, vocab_size)
                 loss_per_sample, loss_per_token = self.train_spec.loss_fn(
-                    pred[0], data["labels"], data["sentence_lens"], data["num_sentence"])  # (1,), (1,)
-                acc = self.train_spec.acc_fn(pred[0], data["labels"])
+                    pred[0], labels, sentence_lens, num_sentence)  # (1,), (1,)
+                acc = self.train_spec.acc_fn(pred[0], labels)
                 # need to free to before bwd to avoid peaking memory
                 del pred
                 loss_per_sample = loss_per_sample.detach()
