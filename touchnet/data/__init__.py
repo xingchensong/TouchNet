@@ -12,14 +12,27 @@ class DataConfig:
     _argument_group_name = "data"
 
     datapipe_type: str = field(
-        default="texttoken",
+        default="causal_lm",
         metadata={
             "help": (
-                "type of datapipe: "
-                "- 'texttoken': extract text token offline and save to *.bin "
-                "- 'audio+metainfo': save wav and text to *.bin, extract text token online during training"
+                "type of datapipe:\n"
+                "- 'causal_lm': extract text token offline and save to *.bin, used in XXXForCausalLM\n"
+                "- 'touch_audio': save wav and text to *.bin, extract text token online during training, used in XXXForASR\n"
+                "- 'qwen2_audio': specific datapipe built for Qwen2Audio"
+                "- 'kimi_audio': specific datapipe built for KimiAudio"
             ),
-            "choices": ["texttoken", "audio+metainfo"],
+            "choices": ["causal_lm", "touch_audio", "qwen2_audio", "kimi_audio"],
+        },
+    )
+    processor_model: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "Pretrained processor path. e.g., AutoProcessor.from_pretrained(args.processor_model).\n"
+                "If this is not None, It means we use huggingface processor for datapipe, "
+                "specific processor that is designed for specific HF model can be "
+                "found in `touchnet/models/xx/processing_xx.py`"
+            ),
         },
     )
     datalist_path: str = field(

@@ -9,12 +9,11 @@ import torch
 from torch.distributed.checkpoint.stateful import Stateful
 from torch.utils.data import IterableDataset
 
-from touchnet.data import DataConfig, processor
+from touchnet.data import DataConfig
 from touchnet.data.dataset import TouchDataset
-from touchnet.tokenizer.tokenizer import BaseTokenizer, BestRQTokenizer
 
 
-class TouchDatapipe(IterableDataset, Stateful):
+class LowLevelTouchDatapipe(IterableDataset, Stateful):
     """The high-level interface dataset class
 
         We have two shuffle stage in the Dataset. The first is global
@@ -176,9 +175,9 @@ class TouchDatapipe(IterableDataset, Stateful):
             self.epoch += 1
 
 
-class Processor(IterableDataset, Stateful):
+class MidLevelTouchDatapipe(IterableDataset, Stateful):
     """
-    Processor class for data processing.
+    MidLevelTouchDatapipe class for data processing.
     """
 
     def __init__(self, source, f, *args, **kw):
@@ -190,7 +189,7 @@ class Processor(IterableDataset, Stateful):
 
     def __iter__(self):
         """ Return an iterator over the source dataset processed by the
-            given processor.
+            given functions (self.f).
         """
         assert self.source is not None
         assert callable(self.f)
@@ -198,7 +197,7 @@ class Processor(IterableDataset, Stateful):
 
     def apply(self, f):
         assert callable(f)
-        return Processor(self, f, *self.args, **self.kw)
+        return MidLevelTouchDatapipe(self, f, *self.args, **self.kw)
 
     def load_state_dict(self, state_dict: Dict[str, Any]):
         assert self.source is not None
@@ -207,64 +206,3 @@ class Processor(IterableDataset, Stateful):
     def state_dict(self) -> Dict[str, Any]:
         assert self.source is not None
         return self.source.state_dict()
-
-
-def audio_and_metainfo_datapipe(
-    data_config: DataConfig,
-    tokenizer: BaseTokenizer,
-    dp_rank: int, dp_world_size: int,
-):
-    """ Construct datapipe from configs
-    """
-    datapipe = TouchDatapipe(data_config, dp_rank, dp_world_size)
-
-    if not isinstance(tokenizer, BestRQTokenizer):
-        datapipe = Processor(datapipe, processor.text_tokenize, tokenizer)
-
-    datapipe = Processor(datapipe, processor.filter, data_config)
-    datapipe = Processor(datapipe, processor.audio_resample, data_config)
-
-    # wav-level augment
-    if data_config.audio_speed_perturb:
-        datapipe = Processor(datapipe, processor.audio_speed_perturb, data_config)
-
-    if data_config.audio_feat_type == 'fbank':
-        datapipe = Processor(datapipe, processor.audio_compute_fbank, data_config)
-    elif data_config.audio_feat_type == 'mfcc':
-        datapipe = Processor(datapipe, processor.audio_compute_mfcc, data_config)
-    elif data_config.audio_feat_type == 'log_mel_spectrogram':
-        datapipe = Processor(datapipe, processor.audio_compute_log_mel_spectrogram,
-                             data_config)
-
-    # feat-level augment
-    if data_config.audiofeat_spec_aug:
-        datapipe = Processor(datapipe, processor.audiofeat_spec_aug, data_config)
-    if data_config.audiofeat_spec_sub:
-        datapipe = Processor(datapipe, processor.audiofeat_spec_sub, data_config)
-    if data_config.audiofeat_spec_trim:
-        datapipe = Processor(datapipe, processor.audiofeat_spec_trim, data_config)
-
-    # feat-level stack & stride
-    datapipe = Processor(datapipe, processor.audiofeat_stack, data_config)
-
-    if isinstance(tokenizer, BestRQTokenizer):
-        # audio pretrain
-        datapipe = Processor(datapipe, processor.batch_audio, data_config,
-                             tokenizer)
-    else:
-        # audio sft, like asr or tts
-        datapipe = Processor(datapipe, processor.batch_pairaudio_pairtext, data_config,
-                             tokenizer)
-    return datapipe
-
-
-def texttoken_datapipe(
-    data_config: DataConfig,
-    tokenizer: BaseTokenizer,
-    dp_rank: int, dp_world_size: int,
-):
-    datapipe = TouchDatapipe(data_config, dp_rank, dp_world_size)
-
-    datapipe = Processor(datapipe, processor.filter, data_config)
-    datapipe = Processor(datapipe, processor.batch_text, data_config, tokenizer)
-    return datapipe

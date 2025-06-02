@@ -16,8 +16,12 @@ from torch.utils.data import IterableDataset
 from torchdata.stateful_dataloader import StatefulDataLoader
 
 from touchnet.data import DataConfig
-from touchnet.data.datapipe import (audio_and_metainfo_datapipe,
-                                    texttoken_datapipe)
+from touchnet.models.kimi_audio.processing_kimi_audio import \
+    kimi_audio_datapipe
+from touchnet.models.llama.processing_llama import (causal_lm_datapipe,
+                                                    touch_audio_datapipe)
+from touchnet.models.qwen2_audio.processing_qwen2_audio import \
+    qwen2_audio_datapipe
 from touchnet.tokenizer.tokenizer import BaseTokenizer
 from touchnet.utils.logging import logger
 
@@ -131,12 +135,18 @@ def build_dataloader(data_config: DataConfig,
             data_config.datalist_epoch = 1
             data_config.datalist_path = data_config.datalist_test_path
 
-    if data_config.datapipe_type == "texttoken":
-        datapipe = texttoken_datapipe(data_config, tokenizer,
+    if data_config.datapipe_type == "causal_lm":
+        datapipe = causal_lm_datapipe(data_config, tokenizer,
                                       dp_rank, dp_world_size)
-    elif data_config.datapipe_type == "audio+metainfo":
-        datapipe = audio_and_metainfo_datapipe(data_config, tokenizer,
-                                               dp_rank, dp_world_size)
+    elif data_config.datapipe_type == "touch_audio":
+        datapipe = touch_audio_datapipe(data_config, tokenizer,
+                                        dp_rank, dp_world_size)
+    elif data_config.datapipe_type == "qwen2_audio":
+        datapipe = qwen2_audio_datapipe(data_config,
+                                        dp_rank, dp_world_size)
+    elif data_config.datapipe_type == "kimi_audio":
+        datapipe = kimi_audio_datapipe(data_config, tokenizer,
+                                       dp_rank, dp_world_size)
     else:
         raise NotImplementedError(f"Unsupported datapipe type: {data_config.datapipe_type}.")
 
