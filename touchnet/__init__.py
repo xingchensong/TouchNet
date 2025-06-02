@@ -16,12 +16,14 @@ from touchnet.models.kimi_audio.modeling_kimi_audio import \
     MoonshotKimiaForCausalLM
 from touchnet.models.kimi_audio.parallelize_kimi_audio import \
     parallelize_kimi_audio
-from touchnet.models.touch_audio.configuration_touch_audio import TouchAudioConfig
-from touchnet.models.touch_audio.modeling_touch_audio import TouchAudioForCausalLM
 from touchnet.models.llama.parallelize_llama import parallelize_llama
 from touchnet.models.llama.pipeline_llama import pipeline_llama
 from touchnet.models.qwen2_audio.parallelize_qwen2_audio import \
     parallelize_qwen2_audio
+from touchnet.models.touch_audio.configuration_touch_audio import \
+    TouchAudioConfig
+from touchnet.models.touch_audio.modeling_touch_audio import \
+    TouchAudioForCausalLM
 from touchnet.tokenizer.tokenizer import build_tokenizer
 from touchnet.utils.metrics import accuracy, build_metrics_processor
 from touchnet.utils.optimizer import build_lr_schedulers, build_optimizers

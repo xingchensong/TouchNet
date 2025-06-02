@@ -13,7 +13,8 @@ from transformers.processing_utils import Unpack
 from transformers.utils import (add_start_docstrings_to_model_forward,
                                 replace_return_docstrings)
 
-from touchnet.models.touch_audio.configuration_touch_audio import TouchAudioConfig
+from touchnet.models.touch_audio.configuration_touch_audio import \
+    TouchAudioConfig
 
 
 # TODO(xcsong): switch to Qwen
