@@ -63,19 +63,6 @@ def flatten_config(config, parent_key=''):
     return dict(items)
 
 
-def get_num_params(model: torch.nn.Module, exclude_embedding: bool = False) -> int:
-    num_params = sum(p.numel() for p in model.parameters())
-    if exclude_embedding:
-        base_model_prefix = getattr(model, "base_model_prefix", "model")
-        submodel = getattr(model, f"{base_model_prefix}")
-        num_params -= sum(
-            sum(p.numel() for p in m.parameters())
-            for m in submodel.children()
-            if isinstance(m, torch.nn.Embedding)
-        )
-    return num_params
-
-
 # hardcoded BF16 type peak flops for NVIDIA A100, H100, and H200 GPU
 def get_peak_flops(device_name: str) -> int:
     try:

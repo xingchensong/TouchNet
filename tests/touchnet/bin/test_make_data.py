@@ -6,7 +6,7 @@ import torch
 import torchaudio
 
 from touchnet.data import DataConfig
-from touchnet.data.datapipe import TouchDatapipe
+from touchnet.data.datapipe import LowLevelTouchDatapipe
 
 
 @pytest.fixture
@@ -61,7 +61,7 @@ def test_make_data(run_shell, num, expected_md5):
     data_config.audiofeat_spec_sub = False
     data_config.audiofeat_spec_trim = False
     data_config.audiofeat_dither = 0.0
-    datapipe = TouchDatapipe(data_config, 0, 1)
+    datapipe = LowLevelTouchDatapipe(data_config, 0, 1)
     for data in datapipe:
         key = data['key']
         assert key in orig_data

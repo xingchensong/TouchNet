@@ -7,7 +7,7 @@ import torch
 from touchnet.bin.make_data import DataBuilder
 from touchnet.data import DataConfig
 from touchnet.data.dataloader import ParallelAwareDataloader
-from touchnet.data.datapipe import TouchDatapipe
+from touchnet.data.datapipe import LowLevelTouchDatapipe
 
 
 def build_fake_data(nnodes, nproc_per_node, max_epoch):
@@ -57,7 +57,7 @@ def test_dataloader(nnodes, nproc_per_node, max_epoch, num_workers, dp_rank, dp_
                         datalist_shuffling=False,
                         dataset_shuffling=False,
                         dataset_mmap=True)
-    datapipe = TouchDatapipe(config, dp_rank, dp_worldsize)
+    datapipe = LowLevelTouchDatapipe(config, dp_rank, dp_worldsize)
     dataloader = ParallelAwareDataloader(
         dataset=datapipe,
         dp_rank=dp_rank,
@@ -81,7 +81,7 @@ def test_dataloader(nnodes, nproc_per_node, max_epoch, num_workers, dp_rank, dp_
 
     # resume from mid-checkpoint
     if len(state_dict.keys()) > 0:
-        datapipe = TouchDatapipe(config, dp_rank, dp_worldsize)
+        datapipe = LowLevelTouchDatapipe(config, dp_rank, dp_worldsize)
         dataloader = ParallelAwareDataloader(
             dataset=datapipe,
             dp_rank=dp_rank,
