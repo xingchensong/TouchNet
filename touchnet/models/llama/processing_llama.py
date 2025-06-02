@@ -297,9 +297,20 @@ def causal_lm_datapipe(
     tokenizer: BaseTokenizer,
     dp_rank: int, dp_world_size: int,
 ):
+    """Construct datapipe for causal language modeling.
+
+    Args:
+        data_config: Configuration for data processing
+        tokenizer: Tokenizer for text processing
+        dp_rank: Data parallel rank
+        dp_world_size: Data parallel world size
+
+    Returns:
+        MidLevelTouchDatapipe: Configured datapipe for causal LM training
+    """
     datapipe = LowLevelTouchDatapipe(data_config, dp_rank, dp_world_size)
 
-    datapipe = MidLevelTouchDatapipe(datapipe, functions.filter, data_config)
+    datapipe = MidLevelTouchDatapipe(datapipe, functions.filter_samples, data_config)
     datapipe = MidLevelTouchDatapipe(datapipe, batch_text, data_config, tokenizer)
     return datapipe
 
@@ -309,14 +320,23 @@ def touch_audio_datapipe(
     tokenizer: BaseTokenizer,
     dp_rank: int, dp_world_size: int,
 ):
-    """ Construct datapipe from configs
+    """ Construct datapipe from configs for touch audio training.
+
+    Args:
+        data_config: Configuration for data processing
+        tokenizer: Tokenizer for text processing
+        dp_rank: Data parallel rank
+        dp_world_size: Data parallel world size
+
+    Returns:
+        MidLevelTouchDatapipe: Configured datapipe for touch audio training
     """
     datapipe = LowLevelTouchDatapipe(data_config, dp_rank, dp_world_size)
 
     if not isinstance(tokenizer, BestRQTokenizer):
         datapipe = MidLevelTouchDatapipe(datapipe, functions.text_tokenize, tokenizer)
 
-    datapipe = MidLevelTouchDatapipe(datapipe, functions.filter, data_config)
+    datapipe = MidLevelTouchDatapipe(datapipe, functions.filter_samples, data_config)
     datapipe = MidLevelTouchDatapipe(datapipe, functions.audio_resample, data_config)
 
     # wav-level augment

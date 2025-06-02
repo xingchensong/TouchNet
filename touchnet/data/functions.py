@@ -49,7 +49,7 @@ def text_tokenize(data, tokenizer: BaseTokenizer):
             yield sample  # do nothing
 
 
-def filter(data, config: DataConfig):
+def filter_samples(data, config: DataConfig):
     """ Filter sample according to feature and label length
         Inplace operation.
     """
