@@ -7,7 +7,7 @@ from transformers.models.llama.modeling_llama import LlamaRMSNorm
 
 
 def post_init(model: LlamaForCausalLM, init_device: torch.device):
-    """Post-initialization function for LlamaForCausalLM and LlamaForASR."""
+    """Post-initialization function for LlamaForCausalLM & TouchAudioForCausalLM."""
 
     # NOTE(xcsong): Init rope and norm.weight
     inv_freq, attention_scaling = model.model.rotary_emb.rope_init_fn(

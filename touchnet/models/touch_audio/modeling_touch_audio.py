@@ -13,13 +13,22 @@ from transformers.processing_utils import Unpack
 from transformers.utils import (add_start_docstrings_to_model_forward,
                                 replace_return_docstrings)
 
-from touchnet.models.llama.configuration_llama import LlamaForASRConfig
+from touchnet.models.touch_audio.configuration_touch_audio import \
+    TouchAudioConfig
 
 
-class LlamaForASR(LlamaForCausalLM):
-    config_class = LlamaForASRConfig
+# TODO(xcsong): switch to Qwen
+class TouchAudioForCausalLM(LlamaForCausalLM):
+    """
+    TouchAudio model for causal language modeling that extends LlamaForCausalLM
+    with audio input support through a linear projection layer.
 
-    def __init__(self, config: LlamaForASRConfig):
+    This model projects audio embeddings to the hidden size before feeding them
+    to the base Llama model, enabling audio-based language generation tasks.
+    """
+    config_class = TouchAudioConfig
+
+    def __init__(self, config: TouchAudioConfig):
         super().__init__(config)
         self.projector = torch.nn.Linear(config.input_size, config.hidden_size, bias=False)
 
@@ -27,7 +36,7 @@ class LlamaForASR(LlamaForCausalLM):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class="LlamaForASRConfig")
+    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class="TouchAudioConfig")
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -48,8 +57,8 @@ class LlamaForASR(LlamaForCausalLM):
             The arguments of this method are the same as the ones from [`LlamaForCausalLM`],
             Read the documentation from [`LlamaForCausalLM`] for more information.
 
-            The only difference between [`LlamaForASR`] and [`LlamaForCausalLM`] lies in the `inputs_embeds`,
-            which is projected to the hidden size in [`LlamaForASR`] before feeding it to the [`LlamaModel`].
+            The only difference between [`TouchAudioForCausalLM`] and [`LlamaForCausalLM`] lies in the `inputs_embeds`,
+            which is projected to the hidden size in [`TouchAudioForCausalLM`] before feeding it to the [`LlamaModel`].
 
         Returns:
 
@@ -63,7 +72,7 @@ class LlamaForASR(LlamaForCausalLM):
         assert labels is None  # we calculate loss in train-loop
         assert inputs_embeds is not None  # (B, T, D)
 
-        # NOTE(xcsong): This is the only difference between LlamaForASR and LlamaForCausalLM
+        # NOTE(xcsong): This is the only difference between TouchAudioForCausalLM and LlamaForCausalLM
         inputs_embeds_audio = self.projector(inputs_embeds)  # (B, T // sp // cp, D),  sp == tp
 
         if input_ids is not None:
@@ -109,4 +118,4 @@ class LlamaForASR(LlamaForCausalLM):
             attentions=outputs.attentions,
         )
 
-__all__ = ["LlamaForASR"]
+__all__ = ["TouchAudioForCausalLM"]

@@ -147,7 +147,7 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
       --dataloader_prefetch_factor ${prefetch} \
       --training_description "librispeech asr" \
       --training_seed "${seed}" \
-      --training_model_name "llama.asr" \
+      --training_model_name "touch_audio" \
       --training_model_config_path "config/${model_config}.json" \
       --training_print_args true \
       --training_trace_dump_folder "exp/${exp_id}" \
