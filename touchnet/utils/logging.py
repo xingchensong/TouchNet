@@ -12,15 +12,26 @@ from dataclasses import dataclass
 logger = logging.getLogger()
 
 
-def init_logger():
+def init_logger(log_file=None):
     logger.setLevel(logging.INFO)
+
+    rank = int(os.environ.get('RANK', 0))
+    formatter = logging.Formatter(
+        f"%(asctime)s - %(name)s - cuda{rank} - %(levelname)s - %(message)s"
+    )
+
     ch = logging.StreamHandler()
     ch.setLevel(logging.INFO)
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
     ch.setFormatter(formatter)
     logger.addHandler(ch)
+
+    if log_file is not None and rank == 0:
+        fh = logging.FileHandler(log_file, mode='a', encoding='utf-8')
+        fh.setLevel(logging.INFO)
+        fh.setFormatter(formatter)
+        logger.addHandler(fh)
+
+    logger.info(f"The logs will be output to both the console and the file: {log_file}")
 
     # suppress verbose torch.profiler logging
     os.environ["KINETO_LOG_LEVEL"] = "5"

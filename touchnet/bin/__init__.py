@@ -208,6 +208,12 @@ class TrainConfig:
             "help": ("Enable CompiledAutograd to compile the backward."),
         },
     )
+    training_enable_liger_kernel: bool = field(
+        default=False,
+        metadata={
+            "help": ("Whether to apply Liger kernel to the model"),
+        },
+    )
     training_gc_freq: int = field(
         default=50,
         metadata={
@@ -567,6 +573,14 @@ class TrainConfig:
             ),
         },
     )
+    optimizer_eps: float = field(
+        default=1e-8,
+        metadata={
+            "help": (
+                "Epsilon value to use."
+            ),
+        },
+    )
     optimizer_impl: str = field(
         default="fused",
         metadata={
@@ -648,6 +662,14 @@ class CkptConverterConfig:
         metadata={
             "help": (
                 "only used in dcp2hf.",
+            ),
+        },
+    )
+    training_model_config_path: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "path to model config file. huggingface style json file."
             ),
         },
     )

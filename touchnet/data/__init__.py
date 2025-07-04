@@ -35,6 +35,14 @@ class DataConfig:
             ),
         },
     )
+    dataset_enable_pack: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Enable packed batching for dataset."
+            ),
+        },
+    )
     datalist_path: str = field(
         default=None,
         metadata={

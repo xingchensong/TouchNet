@@ -488,7 +488,7 @@ class MetricsProcessor:
             f"{color.green}loss (per token): {global_avg_loss_per_token:7.4f}  "
             f"{color.green}grad norm: {global_avg_grad_norm:5.2f}  "
             f"{color.green}acc: {global_avg_acc:5.2f}  "
-            f"{color.green}lr: {lr:.4f}  "
+            f"{color.green}lr: {lr:.5f}  "
             f"{color.yellow}memory: {device_mem_stats.max_reserved_gib:5.2f}GiB"
             f"({device_mem_stats.max_reserved_pct:.2f}%)  "
             f"{color.blue}tps: {round(tps):,}  "
