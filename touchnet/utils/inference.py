@@ -89,6 +89,12 @@ class InferenceConfig:
             "help": ("Whether to apply Liger kernel to the model"),
         },
     )
+    max_length: int = field(
+        default=70000,
+        metadata={
+            "help": ("Maximum length for generation"),
+        },
+    )
 
 
 class AudioDataset(Dataset):
