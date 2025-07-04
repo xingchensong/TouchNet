@@ -175,6 +175,18 @@ cython_debug/
 
 # Unit test
 examples/test/
+touchnet/models/*/test*
+touchnet/bin/test*
+touchnet/loss/test*
+touchnet/models/*/*.wav
+touchnet/models/*/*.mp3
+touchnet/models/*/*.json
+
+# Diff
+diff.patch
+
+# Local backup
+*.bak
 
 # Data
 *.bin
