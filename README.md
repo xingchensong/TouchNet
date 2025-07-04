@@ -82,7 +82,7 @@ conda activate touchnet
 conda install -c conda-forge sox ffmpeg -y
 # (Optional) install CUDA + cuDNN if they are not already available; change `prefix` to your install path.
 # bash install_cuda_cudnn.sh
-pip install -e .[dev]
+pip install -e '.[dev]'
 ```
 
 ## Citation
