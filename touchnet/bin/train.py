@@ -69,21 +69,15 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
     # Enable debug tracing on failure: https://pytorch.org/docs/stable/elastic/errors.html
     @record
     def __init__(self, tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config: TrainConfig):
+
         if job_config.training_enable_liger_kernel:
-            logger.info("Liger kernel is enabled, disable torch.compile")
             job_config.training_compile = False
+
         self.job_config = job_config
         self.tokenizer_config = tokenizer_config
         self.data_config = data_config
 
         torch._dynamo.config.cache_size_limit = 4096
-        logger.info(f"Starting job: {job_config.training_description}")
-
-        if job_config.training_print_args:
-            logger.info(f"Running with tokenizer args: {asdict(tokenizer_config)}")
-            logger.info(f"                  data args: {asdict(data_config)}")
-            logger.info(f"              training args: {asdict(job_config)}")
-
         # take control of garbage collection to avoid stragglers
         self.gc_handler = GarbageCollection(gc_freq=job_config.training_gc_freq)
 
@@ -101,7 +95,13 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         self.device = torch.device(f"{device_type}:{int(os.environ['LOCAL_RANK'])}")
         device_module.set_device(self.device)
         init_distributed(job_config)
+
         init_logger(f"{job_config.training_trace_dump_folder}/touchnet_train.log")
+        logger.info(f"Starting job: {job_config.training_description}")
+        if job_config.training_print_args:
+            logger.info(f"Running with tokenizer args: {asdict(tokenizer_config)}")
+            logger.info(f"                  data args: {asdict(data_config)}")
+            logger.info(f"              training args: {asdict(job_config)}")
 
         # build meshes
         self.world_mesh = self.parallel_dims.build_mesh(device_type=device_type)

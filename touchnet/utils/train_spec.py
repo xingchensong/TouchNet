@@ -10,12 +10,14 @@ from typing import Callable, Type
 
 import torch
 import torch.nn as nn
+from torch.distributed import DeviceMesh
 from torch.distributed.pipelining.schedules import _PipelineSchedule
 from transformers import AutoConfig
 
 from touchnet.bin import TrainConfig
 from touchnet.data.dataloader import BaseDataLoader
 from touchnet.tokenizer.tokenizer import BaseTokenizer
+from touchnet.utils.distributed import ParallelDims
 from touchnet.utils.metrics import MetricsProcessor
 from touchnet.utils.optimizer import LRSchedulersContainer, OptimizersContainer
 
@@ -25,12 +27,12 @@ class TrainSpec:
     name: str
     model_cls: Type[nn.Module]
     config_cls: Type[AutoConfig]
-    parallelize_fn: Callable[[nn.Module], None]
+    parallelize_fn: Callable[[nn.Module, DeviceMesh, ParallelDims, TrainConfig], None]
     pipelining_fn: Callable[
-        [nn.Module], tuple[_PipelineSchedule, list[nn.Module], bool, bool]
+        ..., tuple[_PipelineSchedule, list[nn.Module], bool, bool]
     ]
     build_optimizers_fn: Callable[[list[nn.Module], TrainConfig], OptimizersContainer]
-    build_lr_schedulers_fn: Callable[[OptimizersContainer], LRSchedulersContainer]
+    build_lr_schedulers_fn: Callable[[OptimizersContainer, TrainConfig], LRSchedulersContainer]
     build_dataloader_fn: Callable[..., BaseDataLoader]
     build_tokenizer_fn: Callable[..., BaseTokenizer]
     loss_fn: Callable[..., torch.Tensor]
