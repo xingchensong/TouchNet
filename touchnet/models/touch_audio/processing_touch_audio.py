@@ -248,10 +248,6 @@ def batch_audio(data, config: DataConfig, tokenizer: BestRQTokenizer):
         labels_tensor = torch.tensor(labels[1:] + [-100], dtype=torch.int64)  # ignore last output
         sentence_lens = torch.ones(audio_len, dtype=torch.int64) * audio_len
 
-        input_features_buf.append(input_features)
-        labels_buf.append(labels_tensor)
-        sentence_lens_buf.append(sentence_lens)
-
         # Yield batch when we have enough samples
         if (len(input_features_buf) + 1) * max_len_in_buffer > (config.dataset_batchsize * config.dataset_audio_seqlen):
             yield {
@@ -355,12 +351,6 @@ def batch_pairaudio_pairtext(data, config: DataConfig, tokenizer: BaseTokenizer)
 
         # Sentence length for this sample (text part only)
         sentence_lens = torch.ones(total_len, dtype=torch.int64) * text_len
-
-        input_features_buf.append(input_features)
-        input_ids_buf.append(input_ids)
-        labels_buf.append(labels)
-        attention_mask_buf.append(attention_mask)
-        sentence_lens_buf.append(sentence_lens)
 
         # Yield batch when we have enough samples
         if (len(input_features_buf) + 1) * max_len_in_buffer > (config.dataset_batchsize * config.dataset_audio_seqlen):

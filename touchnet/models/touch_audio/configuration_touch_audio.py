@@ -35,12 +35,9 @@ class TouchAudioConfig(PretrainedConfig):
         **kwargs,
     ):
         if isinstance(audio_config, dict):
-            assert "model_type" in audio_config
-            if audio_config["model_type"] == "touch_audio_projector":
-                audio_config = TouchAudioProjectorConfig(**audio_config)
-            else:
-                assert "input_size" in audio_config
-                audio_config = CONFIG_MAPPING[audio_config["model_type"]](**audio_config)
+            assert "model_type" in audio_config, "model_type must be in audio_config"
+            assert audio_config["model_type"] == "touch_audio_projector", "model_type must be touch_audio_projector"
+            audio_config = TouchAudioProjectorConfig(**audio_config)
         elif audio_config is None:
             audio_config = TouchAudioProjectorConfig()
 

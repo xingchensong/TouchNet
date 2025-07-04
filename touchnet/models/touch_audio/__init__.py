@@ -13,7 +13,7 @@ from touchnet.models.touch_audio.modeling_touch_audio import \
 
 
 def pre_init(args: TrainConfig):
-    """Pre-initialization function for Qwen2AudioForConditionalGeneration."""
+    """Pre-initialization function for TouchAudioForCausalLM."""
     if args.training_enable_liger_kernel:
         # 1. monkey patch the forward function to Qwen2Model
         apply_liger_kernel_to_qwen2()
@@ -22,7 +22,7 @@ def pre_init(args: TrainConfig):
 
 
 def post_init(model: TouchAudioForCausalLM, init_device: torch.device):
-    """Post-initialization function for Qwen2AudioForConditionalGeneration."""
+    """Post-initialization function for TouchAudioForCausalLM."""
 
     # NOTE(xcsong): Init rope and norm.weight
     # 1. llama/qwen backbone

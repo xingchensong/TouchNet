@@ -61,7 +61,8 @@ def feature_extraction(audios: list[numpy.ndarray], data_config: DataConfig, spe
 
     ids, feats, masks, positions = [], [], [], []
     for audio in audios:
-        sample = next(feature_func([{'sample_rate': 16000, 'waveform': torch.from_numpy(audio).unsqueeze(0)}], data_config))
+        sample_rate = getattr(data_config, 'audio_resample_rate', 16000)
+        sample = next(feature_func([{'sample_rate': sample_rate, 'waveform': torch.from_numpy(audio).unsqueeze(0)}], data_config))
         sample = next(functions.audiofeat_stack([sample], data_config))
         # feat [T, D] => [T + 1, D]
         feat = torch.cat([
@@ -126,7 +127,8 @@ if __name__ == "__main__":
         **special_tokens,
     )
 
-    assert (torch.cuda.is_available())
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is not available. This script requires GPU for inference.")
     world_size, local_rank, rank = init_distributed()
 
     model = AutoModelForCausalLM.from_pretrained(
