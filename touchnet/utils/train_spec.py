@@ -35,6 +35,7 @@ class TrainSpec:
     build_tokenizer_fn: Callable[..., BaseTokenizer]
     loss_fn: Callable[..., torch.Tensor]
     acc_fn: Callable[..., torch.Tensor]
+    additional_pre_init_fn: Callable[[TrainConfig], None]
     additional_post_init_fn: Callable[[nn.Module, torch.device], None]
     get_num_flop_per_token_fn: Callable[[int, AutoConfig, int], int]
     get_num_params_fn: Callable[..., int]

@@ -7,6 +7,7 @@
 # This source code is licensed under the BSD-style license found in the
 # LICENSE file in the root directory of this source tree.
 
+import json
 import os
 import time
 from dataclasses import asdict
@@ -68,6 +69,9 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
     # Enable debug tracing on failure: https://pytorch.org/docs/stable/elastic/errors.html
     @record
     def __init__(self, tokenizer_config: TokenizerConfig, data_config: DataConfig, job_config: TrainConfig):
+        if job_config.training_enable_liger_kernel:
+            logger.info("Liger kernel is enabled, disable torch.compile")
+            job_config.training_compile = False
         self.job_config = job_config
         self.tokenizer_config = tokenizer_config
         self.data_config = data_config
@@ -97,6 +101,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         self.device = torch.device(f"{device_type}:{int(os.environ['LOCAL_RANK'])}")
         device_module.set_device(self.device)
         init_distributed(job_config)
+        init_logger(f"{job_config.training_trace_dump_folder}/touchnet_train.log")
 
         # build meshes
         self.world_mesh = self.parallel_dims.build_mesh(device_type=device_type)
@@ -113,14 +118,27 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
         )
         self.train_spec = get_train_spec(job_config.training_model_name)
 
+        if self.train_spec.additional_pre_init_fn is not None:
+            self.train_spec.additional_pre_init_fn(job_config)  # initialize liger kernel
+
         # build model_config
         model_cls = self.train_spec.model_cls
         config_cls = self.train_spec.config_cls
         model_config = config_cls.from_json_file(job_config.training_model_config_path)
-        model_config.return_dict = False  # NOTE: for compatibility with pipeline parallel
+        model_config.return_dict = True  # TODO(xcsong): for compatibility with pipeline parallel, we should set return_dict to False  # noqa
         self.use_flex_attention = model_config._attn_implementation == "flex_attention"
         if self.use_flex_attention:
             job_config.training_compile = False  # TODO(xcsong): support flex_attention with torch.compile
+
+        os.makedirs(job_config.training_trace_dump_folder, exist_ok=True)
+        with open(f"{job_config.training_trace_dump_folder}/tokenizer_config.json", "w", encoding="utf-8") as f:
+            json.dump(asdict(tokenizer_config), f, indent=2, ensure_ascii=False)
+        with open(f"{job_config.training_trace_dump_folder}/data_config.json", "w", encoding="utf-8") as f:
+            json.dump(asdict(data_config), f, indent=2, ensure_ascii=False)
+        with open(f"{job_config.training_trace_dump_folder}/job_config.json", "w", encoding="utf-8") as f:
+            json.dump(asdict(job_config), f, indent=2, ensure_ascii=False)
+        with open(f"{job_config.training_trace_dump_folder}/model_config.json", "w", encoding="utf-8") as f:
+            json.dump(model_config.to_dict(), f, indent=2, ensure_ascii=False)
 
         # build dataloader
         if hasattr(model_config, 'bos_token'):
@@ -404,7 +422,7 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
             # accumulate losses across pipeline microbatches
             # TODO: PP+FSDP unexpectedly puts the loss back to the CPU
             # TODO(xcsong): pack loss for pp
-            loss = (
+            _ = (
                 torch.mean(torch.stack(losses)).to(self.device)
                 if self.pp_has_last_stage
                 else torch.tensor([-1.0], device=self.device)
@@ -416,12 +434,22 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                 labels = data.pop("labels")
                 num_sentence = data.pop("num_sentence")
                 sentence_lens = data.pop("sentence_lens")
+                if not self.job_config.training_enable_liger_kernel and 'shift_labels' in data:
+                    data.pop("shift_labels")
                 pred = self.model_parts[0](**data)
-                # logits.shape = pred[0].shape = (bs, seq_len // cp, vocab_size // tp) if logits.to_local()
-                #                           else (bs, seq_len // cp, vocab_size) if logits.full_tensor()
-                loss_per_sample, loss_per_token = self.train_spec.loss_fn(
-                    pred[0], labels, sentence_lens, num_sentence)  # (1,), (1,)
-                acc = self.train_spec.acc_fn(pred[0], labels)
+                # pred.logits.shape (return dict) = pred[0].shape (return tuple) =
+                #   (bs, seq_len // cp, vocab_size // tp) if logits.to_local()
+                #   else (bs, seq_len // cp, vocab_size) if logits.full_tensor()
+                if self.job_config.training_enable_liger_kernel:
+                    assert pred.loss is not None
+                    loss_per_sample, loss_per_token = pred.loss, pred.loss
+                else:
+                    loss_per_sample, loss_per_token = self.train_spec.loss_fn(
+                        pred.logits, labels, sentence_lens, num_sentence)  # (1,), (1,)
+                if self.train_spec.acc_fn is not None and pred.logits is not None:
+                    acc = self.train_spec.acc_fn(pred.logits, labels)
+                else:
+                    acc = None
                 # need to free to before bwd to avoid peaking memory
                 del pred
                 loss_per_sample.backward()
@@ -459,10 +487,13 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                     dist_mean(loss_per_token, self.world_mesh["dp_cp"]),
                     dist_max(loss_per_token, self.world_mesh["dp_cp"]),
                 )
-                global_avg_acc, global_min_acc = (
-                    dist_mean(acc, self.world_mesh["dp_cp"]),
-                    dist_min(acc, self.world_mesh["dp_cp"]),
-                )
+                if acc is not None:
+                    global_avg_acc, global_min_acc = (
+                        dist_mean(acc, self.world_mesh["dp_cp"]),
+                        dist_min(acc, self.world_mesh["dp_cp"]),
+                    )
+                else:
+                    global_avg_acc, global_min_acc = 0., 0.
             else:
                 raise NotImplementedError("TODO: support other parallelisms")
 
@@ -530,11 +561,13 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
                 labels = data.pop("labels")
                 num_sentence = data.pop("num_sentence")
                 sentence_lens = data.pop("sentence_lens")
+                if not self.job_config.training_enable_liger_kernel and 'shift_labels' in data:
+                    data.pop("shift_labels")
                 pred = self.model_parts[0](**data)
-                # logits.shape = pred[0].shape = (bs, seq_len // cp, vocab_size)
+                # pred.logits.shape (return dict) = pred[0].shape (return tuple) = (bs, seq_len // cp, vocab_size)
                 loss_per_sample, loss_per_token = self.train_spec.loss_fn(
-                    pred[0], labels, sentence_lens, num_sentence)  # (1,), (1,)
-                acc = self.train_spec.acc_fn(pred[0], labels)
+                    pred.logits, labels, sentence_lens, num_sentence)  # (1,), (1,)
+                acc = self.train_spec.acc_fn(pred.logits, labels)
                 # need to free to before bwd to avoid peaking memory
                 del pred
                 loss_per_sample = loss_per_sample.detach()
@@ -599,7 +632,6 @@ class Trainer(torch.distributed.checkpoint.stateful.Stateful):
 
 
 if __name__ == "__main__":
-    init_logger()
     parser = HfArgumentParser([TokenizerConfig, DataConfig, TrainConfig])
     (tok_conf, data_conf, train_conf) = parser.parse_args_into_dataclasses()
     trainer: Optional[Trainer] = None
