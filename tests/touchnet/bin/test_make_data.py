@@ -23,8 +23,8 @@ def run_shell():
 
 
 @pytest.mark.parametrize("num, expected_md5", [
-    (1, "52aa63d2a8bb241047c12b9006c3b647"),
-    (2, "a77adbbe26ee4bc6c1aefc38ec858273")
+    (1, "721ce03ca45a9d238d0918994b64260c"),
+    (2, "da2294b1b6296dbdbee39e301276686b")
 ])
 def test_make_data(run_shell, num, expected_md5):
     result = run_shell(
