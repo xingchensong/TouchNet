@@ -2,6 +2,7 @@
 # Copyright (c) 2023-2025, Songlin Yang, Yu Zhang
 #               2025, Xingchen Song(sxc19@tsinghua.org.cn)
 
+import json
 import os
 from pathlib import Path
 
@@ -29,8 +30,26 @@ def convert_hf_weights(args: CkptConverterConfig):
     else:
         # for custom model that has beed registered in AutoModelForCausalLM
         model = AutoModelForCausalLM.from_pretrained(args.huggingface_model)
-    logger.info(model)
+
+    logger.info(f"huggingface model:\n{model}")
     state_dict = model.state_dict()
+
+    if args.model_type == "touch_audio":
+        prefix = "language_model"
+        for k in list(state_dict.keys()):
+            v = state_dict.pop(k)
+            state_dict[f"{prefix}.{k}"] = v
+        assert args.training_model_config_path is not None, "training_model_config_path is required for touch_audio"
+        with open(args.training_model_config_path, "r") as f:
+            model_config = json.load(f)
+        projector = torch.nn.Linear(model_config["audio_config"]["input_size"],
+                                    model_config["text_config"]["hidden_size"], bias=False)
+        state_dict["projector.weight"] = projector.weight
+        logger.warning(f"Modified {model.config.model_type} state dict: "
+                       f"prefixed keys with 'language_model' and added projector layer")
+    else:
+        # if you want to finetune a standard huggingface model, we should do nothing here
+        pass
 
     checkpoint = Path(os.path.join(args.ckpt_dir, "checkpoint", "step-0"))
     logger.info(f"Writing to DCP at '{checkpoint}'")
@@ -42,5 +61,6 @@ def convert_hf_weights(args: CkptConverterConfig):
 if __name__ == "__main__":
     parser = HfArgumentParser([CkptConverterConfig])
     args = parser.parse_args_into_dataclasses()[0]
-    init_logger()
+    os.makedirs(args.ckpt_dir, exist_ok=True)
+    init_logger(f"{args.ckpt_dir}/touchnet_convert_hf_to_dcp.log")
     convert_hf_weights(args)

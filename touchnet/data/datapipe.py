@@ -26,10 +26,10 @@ class LowLevelTouchDatapipe(IterableDataset, Stateful):
         self.lists = []
         with open(config.datalist_path, "r") as f:
             lists = f.readlines()
-            for l in lists:
-                l = l.strip().split()
-                assert len(l) == 2
-                self.lists.append(dict(dir=l[0], datatypes=l[1]))
+            for line in lists:
+                line = line.strip().split()
+                assert len(line) == 2
+                self.lists.append(dict(dir=line[0], datatypes=line[1]))
         self.config = config
         self.dp_rank = dp_rank
         self.dp_world_size = dp_world_size
@@ -63,6 +63,8 @@ class LowLevelTouchDatapipe(IterableDataset, Stateful):
 
             # 1st sharding on dp ranks
             if self.config.datalist_sharding:
+                assert len(list_idxs) >= self.dp_world_size, \
+                    f"len(list_idxs) = {len(list_idxs)}, it should be equal or larger than dp_world_size = {self.dp_world_size}"
                 list_idxs = list_idxs[self.dp_rank::self.dp_world_size]
 
             # 2nd sharding on dataloader workers
@@ -73,6 +75,9 @@ class LowLevelTouchDatapipe(IterableDataset, Stateful):
             else:
                 worker_id = worker_info.id
                 num_workers = worker_info.num_workers
+            if self.config.datalist_epoch > 1:
+                assert len(list_idxs) >= num_workers, \
+                    f"len(list_idxs) = {len(list_idxs)}, it should be equal or larger than num_workers = {num_workers}"
             list_idxs = list_idxs[worker_id::num_workers]
 
             start_list = self.consumed_lists

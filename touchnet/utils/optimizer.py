@@ -146,6 +146,7 @@ def build_optimizers(
     """
     name = job_config.optimizer_name
     lr = job_config.optimizer_lr
+    eps = job_config.optimizer_eps
 
     optim_implementation = job_config.optimizer_impl
     assert optim_implementation in ["fused", "foreach", "for-loop"]
@@ -155,6 +156,7 @@ def build_optimizers(
 
     optimizer_kwargs = {
         "lr": lr,
+        "eps": eps,
         "betas": (0.9, 0.95),
         "weight_decay": 0.1,
         "fused": fused,

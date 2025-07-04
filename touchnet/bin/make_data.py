@@ -146,6 +146,10 @@ def load_audio(
     #  e.g.
     #  >>>   waveform = load_audio(data["wav"])
     #  >>>   waveform = torch.from_numpy(waveform.astype(numpy.float32) / 32768.0)
+    # NOTE(xcsong): if u want to save audio
+    #  >>>   waveform = load_audio(data["wav"])
+    #  >>>   waveform = torch.from_numpy(waveform).to(torch.int16).unsqueeze(0)
+    #  >>>   torchaudio.save(audio_path, waveform, 16000)
     return numpy.frombuffer(out, numpy.int16).flatten()
 
 
@@ -232,7 +236,6 @@ if __name__ == "__main__":
     os.environ["PYTHONUNBUFFERED"] = "1"
     parser = HfArgumentParser([MakeDataConfig, TokenizerConfig])
     (conf, tok_conf) = parser.parse_args_into_dataclasses()
-    init_logger()
 
     assert conf.jsonl_path is not None, "conf.jsonl_path cannot be None"
     samples = []
@@ -242,6 +245,7 @@ if __name__ == "__main__":
     num = conf.num_utt_per_shard
     chunks = [samples[i : i + num] for i in range(0, len(samples), num)]
     os.makedirs(conf.save_dir, exist_ok=True)
+    init_logger(f"{conf.save_dir}/touchnet_make_data.log")
 
     if conf.datatypes == "audio+metainfo":
         processor = build_audio_and_metainfo

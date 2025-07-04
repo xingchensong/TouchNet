@@ -83,6 +83,12 @@ class InferenceConfig:
             "help": ("prefetch for dataloader"),
         },
     )
+    inference_enable_liger_kernel: bool = field(
+        default=False,
+        metadata={
+            "help": ("Whether to apply Liger kernel to the model"),
+        },
+    )
 
 
 class AudioDataset(Dataset):

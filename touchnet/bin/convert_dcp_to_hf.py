@@ -55,14 +55,17 @@ def save_pretrained(args: CkptConverterConfig):
 
         model.generation_config = generation_config
 
-        logger.info(model)
+        logger.info(f"Model:\n{model}")
         logger.info("Loading state dict from the checkpoint")
 
         # Add datetime.timedelta and io.BytesIO to safe globals
         torch.serialization.add_safe_globals([timedelta, io.BytesIO])
+
         # torch.load now with default weights_only=True will work
-        model.load_state_dict(torch.load(checkpoint_path, map_location='cpu',
-                                         weights_only=True)['model'])
+        state_dict = torch.load(checkpoint_path, map_location='cpu', weights_only=True)['model']
+        missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=True)
+        if len(missing_keys) > 0 or len(unexpected_keys) > 0:
+            raise ValueError(f"Missing keys: {missing_keys}, Unexpected keys: {unexpected_keys}")
 
         logger.info(f"Saving the model to {ckpt_hf_dir}")
         model.save_pretrained(ckpt_hf_dir)
@@ -70,11 +73,11 @@ def save_pretrained(args: CkptConverterConfig):
         try:
             feature_extractor = AutoFeatureExtractor.from_pretrained(args.tokenizer_model)
             processor_component_to_save = feature_extractor
-        except ValueError:
+        except Exception:
             try:
                 processor = AutoProcessor.from_pretrained(args.tokenizer_model)
                 processor_component_to_save = processor
-            except Exception as e:
+            except Exception:
                 processor_component_to_save = None
 
         if processor_component_to_save:
@@ -84,5 +87,6 @@ def save_pretrained(args: CkptConverterConfig):
 if __name__ == "__main__":
     parser = HfArgumentParser([CkptConverterConfig])
     args = parser.parse_args_into_dataclasses()[0]
-    init_logger()
+    os.makedirs(args.ckpt_dir, exist_ok=True)
+    init_logger(f"{args.ckpt_dir}/touchnet_convert_dcp_to_hf.log")
     save_pretrained(args)
