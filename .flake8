@@ -27,3 +27,5 @@ exclude =
     *.md
     .flake8
     __init__.py
+    touchnet/bin/textnorm_zh.py
+    touchnet/bin/error_rate_zh
