@@ -26,6 +26,7 @@ def init_logger(log_file=None):
     logger.addHandler(ch)
 
     if log_file is not None and rank == 0:
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
         fh = logging.FileHandler(log_file, mode='a', encoding='utf-8')
         fh.setLevel(logging.INFO)
         fh.setFormatter(formatter)
