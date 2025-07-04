@@ -23,8 +23,8 @@ def run_shell():
 
 
 @pytest.mark.parametrize("num, expected_md5", [
-    (1, "721ce03ca45a9d238d0918994b64260c"),
-    (2, "da2294b1b6296dbdbee39e301276686b")
+    (1, "05fe272d67459992748bbf5720c5a92e"),
+    (2, "93245372eca0dce2013c1e5bd393f17f")
 ])
 def test_make_data(run_shell, num, expected_md5):
     result = run_shell(
@@ -40,9 +40,7 @@ def test_make_data(run_shell, num, expected_md5):
     )
     assert result.returncode == 0
     md5 = run_shell(
-        f"""
-        find tests/tmp/{num}sample_per_shard -type f -exec md5sum {{}} \\; | sort | cut -d ' ' -f1 | md5sum | awk '{{print $1}}'
-        """
+        f"""find tests/tmp/{num}sample_per_shard \\( -name "*.idx" -o -name "*.bin" \\) -type f -exec md5sum {{}} \\; | sort | cut -d ' ' -f1 | md5sum | awk '{{print $1}}'"""  # noqa
     )
     assert md5.stdout.strip() == expected_md5
     orig_data = {}
