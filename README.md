@@ -80,9 +80,18 @@ For a more concrete example running those stages one by one, see [[examples/audi
 conda create -n touchnet python=3.10
 conda activate touchnet
 conda install -c conda-forge sox ffmpeg -y
+
 # (Optional) install CUDA + cuDNN if they are not already available; change `prefix` to your install path.
 # bash install_cuda_cudnn.sh
-pip install -e '.[dev]'
+
+# Install TouchNet with GPU support (CUDA 12.6 - recommended)
+pip install -e . --index-url https://download.pytorch.org/whl/cu126
+
+# Or install with CUDA 11.8 support
+# pip install -e . --index-url https://download.pytorch.org/whl/cu118
+
+# For development with GPU support
+# pip install -e '.[dev]' --index-url https://download.pytorch.org/whl/cu126
 ```
 
 ## Citation
