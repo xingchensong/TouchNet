@@ -80,10 +80,9 @@ For a more concrete example running those stages one by one, see [[examples/audi
 conda create -n touchnet python=3.10
 conda activate touchnet
 conda install -c conda-forge sox ffmpeg -y
-# (Optional) install cuda+cudnnn if there is no cuda on your local machine, be aware to change `prefix` to your path.
+# (Optional) install CUDA + cuDNN if they are not already available; change `prefix` to your install path.
 # bash install_cuda_cudnn.sh
-pre-commit install  # for clean and tidy code
-pip install -e .
+pip install -e .[dev]
 ```
 
 ## Citation
