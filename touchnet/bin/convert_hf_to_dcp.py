@@ -45,8 +45,8 @@ def convert_hf_weights(args: CkptConverterConfig):
         projector = torch.nn.Linear(model_config["audio_config"]["input_size"],
                                     model_config["text_config"]["hidden_size"], bias=False)
         state_dict["projector.weight"] = projector.weight
-        state_dict["projector.bias"] = None
-        logger.warning(f"we append `language_model` to the params_name of {model.config.model_type}, and add a projector to the state_dict for proper touch_audio initialization !!")  # noqa
+        logger.warning(f"Modified {model.config.model_type} state dict: "
+                       f"prefixed keys with 'language_model' and added projector layer")
     else:
         # if you want to finetune a standard huggingface model, we should do nothing here
         pass
@@ -61,5 +61,6 @@ def convert_hf_weights(args: CkptConverterConfig):
 if __name__ == "__main__":
     parser = HfArgumentParser([CkptConverterConfig])
     args = parser.parse_args_into_dataclasses()[0]
+    os.makedirs(args.ckpt_dir, exist_ok=True)
     init_logger(f"{args.ckpt_dir}/touchnet_convert_hf_to_dcp.log")
     convert_hf_weights(args)

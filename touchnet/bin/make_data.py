@@ -4,7 +4,7 @@
 import json
 import multiprocessing
 import os
-from subprocess import DEVNULL, CalledProcessError, run
+from subprocess import CalledProcessError, run
 from typing import List, Type
 
 import numpy
@@ -113,7 +113,7 @@ def load_audio(
         "ffmpeg",
         "-nostdin",
         "-threads",
-        "1",
+        "0",
         "-ss",
         str(start_time),  # Move -ss before -i for faster seeking
         "-i",
@@ -137,7 +137,7 @@ def load_audio(
     cmd.append("-")
 
     try:
-        out = run(cmd, capture_output=True, check=True, stdin=DEVNULL).stdout
+        out = run(cmd, capture_output=True, check=True).stdout
     except CalledProcessError as e:
         raise Exception(f"Failed to load audio: {e.stderr.decode()}") from e
 

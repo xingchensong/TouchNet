@@ -30,8 +30,7 @@ def init_logger(log_file=None):
         fh.setLevel(logging.INFO)
         fh.setFormatter(formatter)
         logger.addHandler(fh)
-
-    logger.info(f"The logs will be output to both the console and the file: {log_file}")
+        logger.info(f"The logs will be output to both the console and the file: {log_file}")
 
     # suppress verbose torch.profiler logging
     os.environ["KINETO_LOG_LEVEL"] = "5"

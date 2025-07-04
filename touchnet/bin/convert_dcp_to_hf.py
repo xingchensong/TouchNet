@@ -87,5 +87,6 @@ def save_pretrained(args: CkptConverterConfig):
 if __name__ == "__main__":
     parser = HfArgumentParser([CkptConverterConfig])
     args = parser.parse_args_into_dataclasses()[0]
+    os.makedirs(args.ckpt_dir, exist_ok=True)
     init_logger(f"{args.ckpt_dir}/touchnet_convert_dcp_to_hf.log")
     save_pretrained(args)
