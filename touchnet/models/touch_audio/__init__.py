@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2025, Xingchen Song(sxc19@tsinghua.org.cn)
+
 import torch
 from liger_kernel.transformers import (apply_liger_kernel_to_llama,
                                        apply_liger_kernel_to_qwen2)
