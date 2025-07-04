@@ -61,8 +61,12 @@ def dynamic_batch(
     longest_length = 0
     for sample in data:
         assert 'waveform' in sample
-        assert 'instruct' in sample
-        assert 'response' in sample
+        # NOTE(xcsong): if instruct or response is not in sample, we assume it is an asr task
+        if 'instruct' not in sample:
+            sample['instruct'] = "Generate the transcription"
+        if 'response' not in sample:
+            assert 'txt' in sample
+            sample['response'] = sample['txt']
         audio = sample['waveform'].squeeze(0).numpy()
         whisper_features = processor(audio, sampling_rate=processor.sampling_rate,
                                      return_attention_mask=True, return_tensors="pt",
@@ -127,32 +131,32 @@ def dynamic_batch(
             yield {
                 "text_input_ids": pad_sequence(text_input_ids_buf,
                                                batch_first=True,
-                                               padding_side='left',
+                                               padding_side='right',
                                                padding_value=tokenizer.pad),
                 "audio_input_ids": pad_sequence(audio_input_ids_buf,
                                                 batch_first=True,
-                                                padding_side='left',
+                                                padding_side='right',
                                                 padding_value=tokenizer.pad),
                 "attention_mask": pad_sequence(attention_mask_buf,
                                                batch_first=True,
-                                               padding_side='left',
+                                               padding_side='right',
                                                padding_value=0),
                 "labels": pad_sequence(labels_buf,
                                        batch_first=True,
-                                       padding_side='left',
+                                       padding_side='right',
                                        padding_value=-100),
                 "whisper_input_features": pad_sequence(whisper_input_features_buf,
                                                        batch_first=True,
-                                                       padding_side='left',
+                                                       padding_side='right',
                                                        padding_value=0),
                 "whisper_attention_mask": pad_sequence(whisper_attention_mask_buf,
                                                        batch_first=True,
-                                                       padding_side='left',
+                                                       padding_side='right',
                                                        padding_value=0),
                 "num_sentence": len(text_input_ids_buf),
                 "sentence_lens": pad_sequence(sentence_lens_buf,
                                               batch_first=True,
-                                              padding_side='left',
+                                              padding_side='right',
                                               padding_value=1),  # 1 for avoid dividing zero
             }
             text_input_ids_buf, attention_mask_buf, labels_buf = [text_input_ids], [torch.ones_like(labels)], [labels]
@@ -173,32 +177,32 @@ def dynamic_batch(
         yield {
             "text_input_ids": pad_sequence(text_input_ids_buf,
                                            batch_first=True,
-                                           padding_side='left',
+                                           padding_side='right',
                                            padding_value=tokenizer.pad),
             "audio_input_ids": pad_sequence(audio_input_ids_buf,
                                             batch_first=True,
-                                            padding_side='left',
+                                            padding_side='right',
                                             padding_value=tokenizer.pad),
             "attention_mask": pad_sequence(attention_mask_buf,
                                            batch_first=True,
-                                           padding_side='left',
+                                           padding_side='right',
                                            padding_value=0),
             "labels": pad_sequence(labels_buf,
                                    batch_first=True,
-                                   padding_side='left',
+                                   padding_side='right',
                                    padding_value=-100),
             "whisper_input_features": pad_sequence(whisper_input_features_buf,
                                                    batch_first=True,
-                                                   padding_side='left',
+                                                   padding_side='right',
                                                    padding_value=0),
             "whisper_attention_mask": pad_sequence(whisper_attention_mask_buf,
                                                    batch_first=True,
-                                                   padding_side='left',
+                                                   padding_side='right',
                                                    padding_value=0),
             "num_sentence": len(text_input_ids_buf),
             "sentence_lens": pad_sequence(sentence_lens_buf,
                                           batch_first=True,
-                                          padding_side='left',
+                                          padding_side='right',
                                           padding_value=1),  # 1 for avoid dividing zero
         }
 

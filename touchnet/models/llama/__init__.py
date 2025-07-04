@@ -2,8 +2,18 @@
 # Copyright (c) 2025, Xingchen Song(sxc19@tsinghua.org.cn)
 
 import torch
+from liger_kernel.transformers import apply_liger_kernel_to_llama
 from transformers.models.llama import LlamaConfig, LlamaForCausalLM
-from transformers.models.llama.modeling_llama import LlamaRMSNorm
+
+from touchnet.bin import TrainConfig
+
+
+def pre_init(args: TrainConfig):
+    """Pre-initialization function for LlamaForCausalLM."""
+    if args.training_enable_liger_kernel:
+        # 1. monkey patch the forward function to LlamaModel
+        apply_liger_kernel_to_llama()
+
 
 
 def post_init(model: LlamaForCausalLM, init_device: torch.device):
@@ -15,11 +25,8 @@ def post_init(model: LlamaForCausalLM, init_device: torch.device):
     model.model.rotary_emb.inv_freq = inv_freq
     model.model.rotary_emb.attention_scaling = attention_scaling
     model.model.rotary_emb.original_inv_freq = inv_freq
-    assert isinstance(model.model.norm, LlamaRMSNorm)
     torch.nn.init.ones_(model.model.norm.weight)
     for layer in model.model.layers:
-        assert isinstance(layer.input_layernorm, LlamaRMSNorm)
-        assert isinstance(layer.post_attention_layernorm, LlamaRMSNorm)
         torch.nn.init.ones_(layer.input_layernorm.weight)
         torch.nn.init.ones_(layer.post_attention_layernorm.weight)
 
