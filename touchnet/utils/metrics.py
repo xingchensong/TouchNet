@@ -90,7 +90,7 @@ def get_peak_flops(device_name: str) -> int:
             return 756e12
         else:  # for H100 SXM and other variants
             return 989e12
-    elif "H200" in device_name:
+    elif "H200" in device_name or "H20Z" in device_name:
         # data from https://www.nvidia.com/en-us/data-center/h200/
         return 989e12
     elif "3090" in device_name:

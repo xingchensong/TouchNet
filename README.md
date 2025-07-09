@@ -12,6 +12,11 @@
 
 </div>
 
+
+## Latest News 🔥
+- [2025/07/07] We support finetuning `Qwen2-Audio-7B` & `Kimi-Audio-7B` on ASR task! See [WeneSpeech results](examples/audio/sft//asr/README.md) for details.
+
+
 ## Overview
 
 `👆 touchnet` is highly motivated by `torchtitan`. Both of them are clean, minimal codebases for large-scale LLM training using native PyTorch. The main goal that differentiates `👆 touchnet` from `torchtitan` is that `👆 touchnet` focuses on multimodal LLM training where special data pipelines and model structures are needed. Please note that `👆 touchnet` is currently in a pre-release state and under extensive development.
@@ -65,12 +70,6 @@ Here is an end-to-end workflow for a traning job in `👆 TouchNet`:
 
 For a more concrete example running those stages one by one, see [[examples/audio/sft/asr/aishell/run.sh]](./examples/audio/sft/asr/aishell/run.sh)
 
-## TODO
-
-- [ ] support audio/sft/tts
-- [ ] support MoE
-- [ ] support vision/pretrain vision/sft
-- [ ] support text/sft
 
 ## Installation
 

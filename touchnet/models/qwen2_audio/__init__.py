@@ -195,7 +195,7 @@ def forward(
             audio_features = self.multi_modal_projector(selected_audio_feature)
 
             # if we have consecutive audio tokens, then it means we expanded input_ids in processing
-            audio_tokens = input_ids == self.config.audio_token_id
+            audio_tokens = input_ids == self.config.audio_token_index
             legacy_processing = (audio_tokens[:, :-1] & audio_tokens[:, 1:]).sum() == 0
             assert not legacy_processing, "legacy_processing should be False"
 
@@ -204,7 +204,7 @@ def forward(
             audio_features_mask = audio_features_mask < audio_output_lengths[:, None]
             audio_features = audio_features[audio_features_mask]  # [total_valid_audio_tokens, embed_dim], one-dimensional arrangement
 
-            n_audio_tokens = (input_ids == self.config.audio_token_id).sum().item()
+            n_audio_tokens = (input_ids == self.config.audio_token_index).sum().item()
             n_audio_features = audio_features.shape[0]
 
             if n_audio_tokens != n_audio_features:
@@ -223,7 +223,7 @@ def forward(
                         f"Audio features exceed audio tokens: tokens: {n_audio_tokens}, features {n_audio_features}. "
                         f"This would result in information loss. Please check the audio processing pipeline."
                     )
-            special_audio_mask = (input_ids == self.config.audio_token_id).to(inputs_embeds.device)
+            special_audio_mask = (input_ids == self.config.audio_token_index).to(inputs_embeds.device)
             special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds)  # [batch_size, seq_len, embed_dim]
             audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_features)
