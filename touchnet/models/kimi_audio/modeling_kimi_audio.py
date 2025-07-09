@@ -1066,13 +1066,15 @@ class MoonshotKimiaForCausalLM(Qwen2PreTrainedModel, GenerationMixin):
         text_logits = self.lm_head(hidden_states)
         audio_logits = self.mimo_output(mimo_hidden_states)
 
+        # TODO(xcsong): Currently only support ASR task, so we only return text_logits
+        #   we need to add audio_logits to the output when we support TTS tasks
         if not return_dict:
-            output = (text_logits, audio_logits,) + outputs[2:]
+            output = (text_logits,) + outputs[2:]
             return output
 
         return CausalLMOutputWithPast(
             loss=None,
-            logits=(text_logits, audio_logits),
+            logits=text_logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,

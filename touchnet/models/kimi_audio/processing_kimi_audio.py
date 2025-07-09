@@ -63,7 +63,7 @@ def dynamic_batch(
         assert 'waveform' in sample
         # NOTE(xcsong): if instruct or response is not in sample, we assume it is an asr task
         if 'instruct' not in sample:
-            sample['instruct'] = "Generate the transcription"
+            sample['instruct'] = "Generate the transcription:"
         if 'response' not in sample:
             assert 'txt' in sample
             sample['response'] = sample['txt']
